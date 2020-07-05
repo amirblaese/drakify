@@ -1,4 +1,4 @@
-Fully-featured Chess game written using Pygame.
+# DRAKIFY
 
 ## Screenshots
 
