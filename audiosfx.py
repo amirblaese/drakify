@@ -139,7 +139,7 @@ def FFT_brickwallHPF(filename,cutoff,wout=True,plot=True):
         ax1.semilogx(xfreq,20*np.log10(abs(yfreq[0:n,0]+.0001)),'k-',lw=0.5)
         ax1.semilogx(xfreq,20*np.log10(abs(yfreqBHPF[0:n//1,0]+.0001)),'m-',lw=0.1)
         ax1.set_xlabel('Frequency (Hz)')
-        ax1.set_ylabel('Amplitude (dB)')
+        ax1.set_ylabel('Amplitude')
         ax2.plot(data,'k-',label='Raw')
         ax2.plot(data_filtered,'m-',label='Filtered')
         ax2.set_xlim(0,10000)
