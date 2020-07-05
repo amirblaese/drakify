@@ -58,5 +58,20 @@ These generally do not sound good.
 
 Quick and easy implementation of the scipy Butterworth IIR filters to process audio.
 
+![Alt text](pic/Filter.png?raw=true "Single pole HPF at 200 Hz.")
 
-![Alt text](pic/Compressor.png?raw=true "Screenshot 1")
+###### Slow
+
+Resample the audio to convert to higher or lower speed (default slows by 10%).
+
+###### Verb
+
+Delay algorithm. Currently a bit finnicky to use but can sound quite nice with correct settings, see the **drakifyL** function for some nice numbers.
+
+![Alt text](pic/Delay.png?raw=true "Illustration of the delay algorithm. The original signal is repeated <y> times with reduced amplitude at <x> sample spacing")
+
+###### Compress
+
+Dynamic range compressor. Contains almost all standard settings of compressors (threshold, attack, release, makeup). Currently only uses a hard knee and does **not** calculate makeup gain automatically.
+
+![Alt text](pic/Compressor.png?raw=true "Dynamic range compression and gain reduction curves.")
