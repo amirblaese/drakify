@@ -2,7 +2,7 @@ Fully-featured Chess game written using Pygame.
 
 ## Screenshots
 
-![Alt text](pic/compressor.png?raw=true "Screenshot 1") &nbsp; &nbsp; &nbsp; ![Alt text](screenshots/2rr.png?raw=true "Screenshot 2")
+![Alt text](pic/Compressor.png?raw=true "Screenshot 1") &nbsp; &nbsp; &nbsp; ![Alt text](screenshots/2rr.png?raw=true "Screenshot 2")
 
 ## How to play
 
