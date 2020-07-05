@@ -52,7 +52,7 @@ A series of FFT filters meant for brickwall highpass or lowpass or band reject f
 and not just attenuated.
 These generally do not sound good.
 
-![Alt text](pic/FFT_Filter.svg?raw=true "FFT HPF at 200 Hz. Notice the ringing introduced in the time domain in the filtered data.")
+![Alt text](pic/FFT_Filter.png?raw=true "FFT HPF at 200 Hz. Notice the ringing introduced in the time domain in the filtered data.")
 
 ###### Filters (LPF, HPF, BP)
 
