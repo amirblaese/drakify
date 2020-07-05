@@ -68,10 +68,10 @@ Resample the audio to convert to higher or lower speed (default slows by 10%).
 
 Delay algorithm. Currently a bit finnicky to use but can sound quite nice with correct settings, see the **drakifyL** function for some nice numbers.
 
-![Alt text](pic/Delay.png?raw=true "Illustration of the delay algorithm. The original signal is repeated <y> times with reduced amplitude at <x> sample spacing")
+![Alt text](pic/delay.png?raw=true "Illustration of the delay algorithm. The original signal is repeated <y> times with reduced amplitude at <x> sample spacing")
 
 ###### Compress
 
-Dynamic range compressor. Contains almost all standard settings of compressors (threshold, attack, release, makeup). Currently only uses a hard knee and does **not** calculate makeup gain automatically.
+Dynamic range compressor. Contains almost all standard settings of compressors (threshold, attack, release, makeup). Currently only uses a hard knee and does **not** calculate makeup gain automatically. Also contains gain smoothing algorithm. Beware of low attack times that may cause distortion.
 
 ![Alt text](pic/Compressor.png?raw=true "Dynamic range compression and gain reduction curves.")
