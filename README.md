@@ -10,7 +10,7 @@ This library uses a few basic python libraries: numpy, pylab, scipy(fftpack,sign
 
 ## Features 
 - Filters
-   - Lowpass, Highpass, Bandpass IIR filters (Butterworth)
+   - Lowpass, highpass, bandpass IIR filters (Butterworth)
    - FFT brickwall filters
 - Speed up and down
 - Delay
@@ -24,7 +24,7 @@ This library uses a few basic python libraries: numpy, pylab, scipy(fftpack,sign
 - Waveform snipping
 - Mixing
 - Normalization
-- Fun and unique presets designed for real world purposes.
+- Fun and unique presets designed `for real world purposes`.
 
 ## How to use?
 
