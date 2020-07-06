@@ -70,8 +70,30 @@ Delay algorithm. Currently a bit finnicky to use but can sound quite nice with c
 
 ![Alt text](pic/delay.png?raw=true "Illustration of the delay algorithm. The original signal is repeated <y> times with reduced amplitude at <x> sample spacing")
 
-###### Compress
+###### Compress (limit)
 
-Dynamic range compressor. Contains almost all standard settings of compressors (threshold, attack, release, makeup). Currently only uses a hard knee and does **not** calculate makeup gain automatically. Also contains gain smoothing algorithm. Beware of low attack times that may cause distortion.
+Dynamic range compressor. Contains almost all standard settings of compressors (threshold, ratio, attack, release, makeup). Currently only uses a hard knee and does **not** calculate makeup gain automatically. Also performs gain smoothing algorithm. Beware of low attack times that may cause distortion. Limit applies compression at high ratio.
 
 ![Alt text](pic/Compressor.png?raw=true "Dynamic range compression and gain reduction curves.")
+
+###### Distort
+
+Distortion with different flavors. 
+
+![Alt text](pic/Distortion.png?raw=true "Distortion curves on sine wave.")
+
+###### Stereo/Mono
+
+Converts mono(stereo) input to stereo(mono).
+
+###### Snip
+
+Cuts starting and ending point of audio file.
+
+###### Mix
+
+Mix two signals at desired ratio.
+
+###### Drakify
+
+The main goal behind this project was to convert music into a "slowed and reverbed" type songs that may be found on Youtube as remixes. This function emulates this using presets of above effects.

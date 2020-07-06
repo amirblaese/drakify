@@ -942,7 +942,7 @@ def distort(filename,threshold,type='smag',wout=True,plot=True):
                     dataD[i,k]=dataD[i,k]-dataD[i,k]**3
     if wout==True:
         print('Exporting...')
-        sf.write(filename[0:len(filename)-4]+'_distort.wav',dataD,44100,'PCM_16')
+        sf.write(filename[0:len(filename)-4]+'_distort.wav',dataD,sr,'PCM_16')
     #PLOTTING#
     if plot==True:
         print('Plotting...')
