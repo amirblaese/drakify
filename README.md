@@ -37,12 +37,12 @@ will document the details of the functions. The fine details of each function ca
 
 ## Details of functions
 
-###### inputwav
+###### Inputwav
 
 Reads in the audio file and determines if the source is mono or stereo. Returns decoded array in bits and dB, sample rate, number of 
 channels, and length of input in samples.
 
-###### normalize
+###### Normalize
 
 Normalizes the audio to 0 dB. 
 
@@ -80,7 +80,7 @@ Dynamic range compressor. Contains almost all standard settings of compressors (
 
 Distortion with different flavors. 
 
-![Alt text](pic/Distortion.png?raw=true "Distortion curves on sine wave.")
+![Alt text](pic/distortion.png?raw=true "Distortion curves on sine wave.")
 
 ###### Stereo/Mono
 
