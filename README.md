@@ -78,9 +78,7 @@ Dynamic range compressor. Contains almost all standard settings of compressors (
 
 ###### Distort
 
-Distortion with different flavors. 
-
-![Alt text](pic/distortion.png?raw=true "Distortion curves on sine wave.")
+Arctan waveshaper.
 
 ###### Stereo/Mono
 
