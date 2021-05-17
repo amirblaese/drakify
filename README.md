@@ -1,7 +1,6 @@
 # 📻 DRAKIFY
 
 ## About
-https://raw.githubusercontent.com/amirblaese/drakify/blob/master/n.mp3
 An easy-to-use audio effect library featuring high quality effects and unique presets. 
 
 ## Dependencies
