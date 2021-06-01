@@ -5,7 +5,7 @@ An easy-to-use audio effect library featuring high quality effects and unique pr
 
 Getting your favorite song "slowed and reverbed" is as simple as
 
-    drakifyL('songname.wav')
+    drakify('songname.wav')
   
 ## Dependencies
 
