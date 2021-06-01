@@ -3,6 +3,10 @@
 ## About
 An easy-to-use audio effect library featuring high quality effects and unique presets. 
 
+Getting your favorite song "slowed and reverbed" is as simple as
+
+    drakifyL('songname.wav')
+  
 ## Dependencies
 
 This library uses a few basic python libraries: numpy, pylab, scipy(fftpack,signal) and soundfile.
@@ -18,7 +22,6 @@ This library uses a few basic python libraries: numpy, pylab, scipy(fftpack,sign
 - Distortion (numerous shapes)
 - Stereo conversion
 - Mono conversion
-- Chorus
 - Waveform viewing
 - Waveform snipping
 - Mixing
