@@ -11,6 +11,8 @@ Getting your favorite song "slowed and reverbed" is as simple as
 
 This library uses a few basic python libraries: numpy, pylab, scipy(fftpack,signal) and soundfile.
 
+    pip install -r requirements.tx
+
 ## Features 
 - Filters
    - Lowpass, highpass, bandpass IIR filters (Butterworth)
