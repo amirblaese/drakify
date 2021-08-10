@@ -673,7 +673,108 @@ def compress(filename,threshold,ratio,makeup,attack,release,wout=True,plot=False
     print('Completed in '+str(elapsed)+' milliseconds.')    
     return dataCs,dataCs_bit
 
-
+def gate(filename,threshold,ratio,attack,release,wout=True,plot=True):
+    """
+    Reduces dynamic range of input signal by reducing volume above threshold.
+    The gain reduction is smoothened according to the attack and release.
+    Makeup gain must be added manually.
+    Parameters
+    ----------
+    filename : string
+        Name of the input *.wav file.
+    threshold : scalar (dB)
+        value in dB of the threshold at which the compressor engages in
+        gain reduction.
+    ratio : scalar
+        The ratio at which volume is reduced for every dB above the threshold
+        (i.e. r:1)
+        For compression to occur, ratio should be above 1.0. Below 1.0, you
+        are expanding the signal.
+      
+    makeup: scalar (dB)
+        Amount of makeup gain to apply to the compressed signal
+  
+    attack: scalar (ms)
+        Characteristic time required for compressor to apply full gain
+        reduction. Longer times allow transients to pass through while short
+        times reduce all of the signal. Distortion will occur if the attack
+        time is too short.
+  
+    release: scalar (ms)
+        Characteristic time that the compressor will hold the gain reduction
+        before easing off. Both attack and release basically smoothen the gain
+        reduction curves.
+      
+    wout: True/False, optional, default=True
+        Writes the data to a 16 bit *.wav file. Equating to false will suppress
+        *.wav output, for example if you want to chain process.
+      
+    plot: True/False, optional, default=True
+        Produces plot of waveform and gain reduction curves.
+  
+      
+    Returns
+    -------
+    data_Cs: array containing the compressed waveform in dB
+    data_Cs_bit: array containing the compressed waveform in bits.
+    """
+    start=time.time()
+    if ratio < 1.0:
+        print('Ratio must be > 1.0 for compression to occur! You are expanding.')
+    if ratio==1.0:
+        print('Signal is unaffected.')
+    n, data, data_dB,sr,ch=inputwav(filename)
+    #Array for the compressed data in dB
+    dataC=data_dB.copy()
+    #attack and release time constant
+    a=np.exp(-np.log10(9)/(44100*attack*1.0E-3))
+    re=np.exp(-np.log10(9)/(44100*release*1.0E-3))
+    #apply compression
+    print('Compressing...')
+    for k in range (ch):
+        for i in range (n):
+            if dataC[i,k]<threshold:
+                dataC[i,k]=-100
+    #Array for the smooth compressed data with makeup gain applied
+    #Convert our dB data back to bits
+    dataCs_bit=10.0**((dataC)/20.0)
+    #sign the bits appropriately:
+    for k in range (ch):
+        for i in range (len(data)):
+            if data[i,k]<0.0:
+                dataCs_bit[i,k]=-1.0*dataCs_bit[i,k]
+    #Plot the data:
+    if plot==True:
+        print('Plotting...')
+        t=np.linspace(0,n/(1.0*sr),n)
+        py.close()
+        fig, (ax1, ax2) = py.subplots(nrows=2)  
+        #ax2.plot(t,gain,'k-',linewidth=0.1,label='Gain Reduction')
+        #ax2.plot(t,sgain,'r-',linewidth=1, label='Gain Reduction Smooth')
+        ax1.plot(t,data,'k-',linewidth=1,label=filename)
+        ax1.plot(t,dataCs_bit,'m-',linewidth=0.1,
+                label=filename+' compressed')
+        ax1.axhline(10**(threshold/20.0),linestyle='-',
+                    color='cyan',linewidth=1)
+        ax1.axhline(-10**(threshold/20.0),linestyle='-',
+                    color='cyan',linewidth=1)
+        ax1.legend()
+        ax2.legend()
+        ax2.set_xlabel('Time (s)')
+        ax2.set_ylabel('Gain Reduction (dB)')
+        ax1.set_ylabel('Amplitude (Rel. Bit)')
+        ax1.set_xlabel('Time (s)')
+    #write data to 16 bit file
+    if wout==True:
+        print('Exporting...')
+        sf.write(filename[0:len(filename)-4]+'_gated.wav',dataCs_bit,
+                sr,'PCM_16')
+    end=time.time()
+    elapsed=int(1000*(end-start))
+    print('Done!')
+    print('...............................')
+    print('Completed in '+str(elapsed)+' milliseconds.')    
+    return dataC,dataCs_bit
 
 def limit(filename,threshold,makeup,wout=True,plot=False):
     """
@@ -832,6 +933,44 @@ def stereo(filename,time,wout=True):
     print ('Done!')
     return data_st
 
+def chorus(filename,s=False,wout=True):
+    """
+    Produces chorus effect on input
+    Parameters
+    ----------
+    filename : string
+        Name of the input *.wav file.
+    wout: True/False, optional, default=True
+        Writes the data to a 16 bit *.wav file. Equating to false will suppress
+        *.wav output, for example if you want to chain process without creating
+        too many files.
+      
+    Returns
+    -------
+    data_m: array containing the stereo waveform in normalized bits.
+    """
+    n, data, data_dB,sr,ch=inputwav(filename)
+    data_1=slow(filename,p=0.1,wout=False)
+    data_2=slow(filename,p=-0.1,wout=False)
+    data_2pd=np.zeros((len(data_1),ch))
+    data_2pd[0:len(data_2),:]=data_2
+    data_pd=np.zeros((len(data_1),ch))
+    data_pd[0:len(data),:]=data
+    if s==True:
+        print('Adding stereo chorus...')
+        sf.write('./chorusw.wav',data_1+data_2pd,44100,'PCM_24')
+        st=stereo('chorusw.wav',2,wout=False)
+        data_F=data_pd+0.3*st
+    else:
+        print('Adding mono chorus...')
+        data_F=data_pd+0.81*data_1+0.8*data_2pd
+    if wout==True:
+        print('Exporting...')
+        sf.write('./chorus.wav',data_F,44100,'PCM_24')
+    os.remove('chorusw.wav')
+    print('Done!')
+    return data_F
+
 def view(filename):
     """
     Plots waveform of input audio file. Note that every 100th data point is
@@ -916,12 +1055,15 @@ def mix(f1,f2,r):
     data_sum=r*data+(1-r)*data1
     sf.write(f1[0:len(f1)-4]+f2,data_sum,sr,'PCM_16')
 
-
 def drakify(filename):
-    slow(filename,wout=True)
-    verb(filename[0:len(filename)-4]+'_slow.wav',5000,4,0.5)
-    os.replace(filename[0:len(filename)-4]+'_slow_verbed.wav',filename[0:len(filename)-4]+'_drakify.wav')
-    os.remove(filename[0:len(filename)-4]+'_slow.wav')
+    compress(filename,1,1,-20,1,1,wout=True,plot=False)
+    slow(filename[0:len(filename)-4]+'_compressed.wav',wout=True,p=20)
+    verb(filename[0:len(filename)-4]+'_compressed_slow.wav',5000,4,0.5)
+    os.replace(filename[0:len(filename)-4]+'_compressed_slow_verbed.wav',filename[0:len(filename)-4]+'_drakify.wav')
+    os.remove(filename[0:len(filename)-4]+'_compressed_slow.wav')
+    os.remove(filename[0:len(filename)-4]+'_compressed.wav')
+    normalize(filename[0:len(filename)-4]+'_drakify.wav')
+    os.remove(filename[0:len(filename)-4]+'_drakify.wav')
     #print(3)
     
 def drakifyD(filename):
