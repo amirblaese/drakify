@@ -1,5 +1,5 @@
 # 📻 DRAKIFY
-
+Written by Shayan Gheidi.
 ## About
 An easy-to-use audio effect library featuring high quality effects and unique presets. 
 
