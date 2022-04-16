@@ -1,11 +1,13 @@
 # 📻 DRAKIFY
-Written by Shayan Gheidi.
+Written by Shayan Gheidi. 
 ## About
 An easy-to-use audio effect library featuring high quality effects and unique presets. 
 
 Getting your favorite song "slowed and reverbed" is as simple as
 
     drakify('songname.wav')
+    
+ Listen to "backto.wav" for before and "backto_drakifyL.wav" for after versions showing a super limited version of my Drakify algorithm. 
   
 ## Dependencies
 
