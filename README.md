@@ -7,7 +7,7 @@ Getting your favorite song "slowed and reverbed" is as simple as
 
     drakify('songname.wav')
     
- Listen to "backto.wav" for before and "backto_drakifyL.wav" for after versions showing a super limited version of my Drakify algorithm. 
+ Listen to "backto.wav" for before and "backto_drakify<>.wav" for after versions showing my Drakify algorithm. The L and D suffixes stand for the drakifyL and drakifyD versions of the algorithm indicating limited and distorted versions.
   
 ## Dependencies
 
