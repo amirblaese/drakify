@@ -15,7 +15,7 @@ This library uses a few basic python libraries: numpy, pylab, scipy(fftpack,sign
 
     pip install -r requirements.txt
     
-## In a nushell?
+## In a nutshell?
 
     !git clone https://github.com/amirblaese/drakify
     cd drakify
