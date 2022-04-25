@@ -14,6 +14,13 @@ Getting your favorite song "slowed and reverbed" is as simple as
 This library uses a few basic python libraries: numpy, pylab, scipy(fftpack,signal) and soundfile.
 
     pip install -r requirements.txt
+    
+## In a nushell?
+
+    !git clone https://github.com/amirblaese/drakify
+    cd drakify
+    import audiosfx as aud
+    aud.drakify('my_favorite_song.wav')
 
 ## Features 
 - Filters
