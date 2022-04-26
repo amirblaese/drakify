@@ -505,9 +505,7 @@ def conv_reverb(filename,ir="vocalduo.wav",wet=0.5,wout=True):
   n_IR, data_IR, data_dB_IR,sr_IR,ch_IR=inputwav(ir)
   print('Convolving impulse response with track...')
   convolution = convolve(data,data_IR,mode='full')
-  print(ch)
   for i in range(ch+1): #normalize the song
-    print(i)
     convolution[:,i]=convolution[:,i]/max(convolution[:,i])
   song_pad = np.zeros(convolution[:,0:2].shape)
   for i in range(ch):
