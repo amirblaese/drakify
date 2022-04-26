@@ -499,7 +499,7 @@ def slow(filename,p=10,wout=True):
 
   
 
-def conv_reverb(filename,ir="vocalduo.wav",wet=0.3,wout=True):  
+def conv_reverb(filename,ir="vocalduo.wav",wet=0.2,wout=True):  
   print('test')
   start=time.time()
   n, data, data_dB,sr,ch=inputwav(filename)
@@ -512,7 +512,7 @@ def conv_reverb(filename,ir="vocalduo.wav",wet=0.3,wout=True):
   for i in range(ch):
     song_pad[0:len(data)]=data
   print('Mixing...')
-  final = wet*song_pad+(1-wet)*convolution[:,0:2]
+  final = (1-wet)*song_pad+(wet)*convolution[:,0:2]
   if wout==True:
       print('Exporting...')
       sf.write(filename[0:len(filename)-4]+'_verbed.wav',final,sr,'PCM_16')
