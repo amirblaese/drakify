@@ -499,7 +499,7 @@ def slow(filename,p=10,wout=True):
 
   
 
-def conv_reverb(filename,ir="vocalduo.wav",wet=0.5,wout=True):  
+def conv_reverb(filename,ir="vocalduo.wav",wet=0.3,wout=True):  
   print('test')
   start=time.time()
   n, data, data_dB,sr,ch=inputwav(filename)
