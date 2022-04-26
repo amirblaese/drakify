@@ -77,6 +77,10 @@ Quick and easy implementation of the scipy Butterworth IIR filters to process au
 
 Resample the audio to convert to higher or lower speed (default slows by 10%).
 
+###### Convolution Reverb (NEW!)
+
+Convolution reverb implementation, much faster than the previous iteration and sounds like real reverb. You can use your own impulse response file if you wish.
+
 ###### Verb
 
 Delay algorithm. Currently a bit finnicky to use but can sound quite nice with correct settings, see the **drakifyL** function for some nice numbers.
