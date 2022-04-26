@@ -1,1171 +1,1141 @@
-{
-  "nbformat": 4,
-  "nbformat_minor": 0,
-  "metadata": {
-    "colab": {
-      "name": "Untitled22.ipynb",
-      "provenance": [],
-      "authorship_tag": "ABX9TyMh9e5q9EZzRyGbMHVZTpWy"
-    },
-    "kernelspec": {
-      "name": "python3",
-      "display_name": "Python 3"
-    },
-    "language_info": {
-      "name": "python"
-    }
-  },
-  "cells": [
-    {
-      "cell_type": "code",
-      "execution_count": null,
-      "metadata": {
-        "id": "tH4hMqpzOm1V"
-      },
-      "outputs": [],
-      "source": [
-        "\"\"\"\n",
-        "Created on Sat Jun 06 20:47:37 2020\n",
-        "@author: Shayan\n",
-        "\"\"\"\n",
-        "import numpy as np\n",
-        "import pylab as py\n",
-        "from scipy.fftpack import fft,ifft,rfft,irfft\n",
-        "from scipy.signal import blackman,hamming,chebwin,resample,stft,butter,lfilter,convolve\n",
-        "from scipy.signal import freqz\n",
-        "import soundfile as sf\n",
-        "import os\n",
-        "import time\n",
-        "\n",
-        "\n",
-        "def inputwav(filename):\n",
-        "    \"\"\"\n",
-        "    Decodes input file using \"soundfile\" library. Determines if file is\n",
-        "    mono or stereo and converts data to dB.\n",
-        "    Parameters\n",
-        "    ----------\n",
-        "    filename: string\n",
-        "        Name of the input <audio> file. Uses the soundfile python library\n",
-        "        to decode the input.\n",
-        "    Returns\n",
-        "    -------\n",
-        "    n: length of audio in samples\n",
-        "  \n",
-        "    data: array containing the signal in bits.\n",
-        "  \n",
-        "    data_dB: array containing the signal in dB.\n",
-        "  \n",
-        "    sr: sample rate\n",
-        "  \n",
-        "    ch: number of audio channels. 1 = mono, 2 = stereo\n",
-        "    \"\"\"\n",
-        "    data, sr = sf.read(filename)\n",
-        "    print('Decoding \"'+filename+'\"...')\n",
-        "    print('Sample rate is '+str(sr)+'...')\n",
-        "    try:\n",
-        "        ch=len(data[0,])\n",
-        "    except:\n",
-        "        ch=1\n",
-        "    print('File contains '+str(ch)+' audio channel(s)...')\n",
-        "    #Reshape the data so other functions can interpret the array if mono.\n",
-        "    #basically transposing the data\n",
-        "    if ch==1:\n",
-        "        data=data.reshape(-1,1)\n",
-        "    n=len(data)\n",
-        "    #This prevents log(data) producing nan when data is 0\n",
-        "    data[np.where(data==0)]=0.00001\n",
-        "    #convert to dB\n",
-        "    data_dB=20*np.log10(abs(data))\n",
-        "    return n, data,data_dB,sr, ch\n",
-        "\n",
-        "def normalize(filename,wout=True):\n",
-        "    \"\"\"\n",
-        "    Normalize volume to 0 dB.\n",
-        "    Parameters\n",
-        "    ----------\n",
-        "    filename: string\n",
-        "        Name of the input <audio> file. Uses the soundfile python library\n",
-        "        to decode the input.\n",
-        "      \n",
-        "    wout: True/False, optional, default=True\n",
-        "        Writes the data to a 16 bit *.wav file. Equating to false will suppress\n",
-        "        *.wav output, for example if you want to chain process.\n",
-        "    Returns\n",
-        "    -------\n",
-        "    data_norm: Normalized data array in bits\n",
-        "    \"\"\"\n",
-        "    n, data, data_dB,sr,ch=inputwav(filename)\n",
-        "    if ch==1:\n",
-        "        diff=0-max(data_dB)\n",
-        "    if ch==2:\n",
-        "        d1=0-max(data_dB[:,0])\n",
-        "        d2=0-max(data_dB[:,1])\n",
-        "        diff=max(d1,d2)\n",
-        "    print('Adding '+str(diff)+' dB...')\n",
-        "    data_dB_norm=data_dB+diff\n",
-        "    data_norm=10.0**((data_dB_norm)/20.0)\n",
-        "    #sign the bits appropriately:\n",
-        "    for k in range (ch):\n",
-        "        for i in range (n):\n",
-        "            if data[i,k]<0.0:\n",
-        "                data_norm[i,k]=-1.0*data_norm[i,k]\n",
-        "    if wout==True:\n",
-        "        print('Exporting...')\n",
-        "        sf.write(filename[0:len(filename)-4]+'_normalized.wav',data_norm,sr,'PCM_16')\n",
-        "    print('Done!')\n",
-        "    return data_norm\n",
-        "\n",
-        "def FFT_brickwallHPF(filename,cutoff,wout=True,plot=True):\n",
-        "    \"\"\"\n",
-        "    Deletes frequencies below cutoff using brickwall. Beware of phase issues.\n",
-        "    Parameters\n",
-        "    ----------\n",
-        "    filename: string\n",
-        "        Name of the input <audio> file. Uses the soundfile python library\n",
-        "        to decode the input.\n",
-        "      \n",
-        "    cutoff: int (Hz)\n",
-        "        Frequency of the filter cutoff below which data is filtered out.\n",
-        "  \n",
-        "    wout: True/False, optional, default=True\n",
-        "        Writes the data to a 16 bit *.wav file. Equating to false will suppress\n",
-        "        *.wav output, for example if you want to chain process.\n",
-        "      \n",
-        "    plot: True/False, optional, default=True\n",
-        "        Produces plot of raw wave form and processed waveform.\n",
-        "    Returns\n",
-        "    -------\n",
-        "    data_filtered: array containing filtered audio in bits\n",
-        "    \"\"\"\n",
-        "    n, data, data_dB,sr,ch=inputwav(filename)\n",
-        "    print('Applying FFT...')\n",
-        "    yfreq=rfft(data,axis=0)\n",
-        "    xfreq=np.linspace(0,sr/(2.0),n)\n",
-        "    yfreqBHPF=np.zeros((n,ch))\n",
-        "    yfreqBHPF[0:n,:]=yfreq\n",
-        "    print('Applying brickwall at '+str(cutoff)+' Hz...')\n",
-        "    yfreqBHPF[0:np.searchsorted(xfreq,cutoff),:]=0.0\n",
-        "    data_filtered=(irfft(yfreqBHPF,axis=0))\n",
-        "    if wout==True:\n",
-        "        print('Exporting...')\n",
-        "        sf.write(filename[0:len(filename)-4]+'_brickwallHPF.wav',data_filtered,sr,'PCM_16')\n",
-        "    if plot==True:\n",
-        "        print('Plotting...')\n",
-        "        py.close()\n",
-        "        fig, (ax1, ax2) = py.subplots(nrows=2)\n",
-        "        ax1.semilogx(xfreq,20*np.log10(abs(yfreq[0:n,0]+.0001)),'k-',lw=0.5)\n",
-        "        ax1.semilogx(xfreq,20*np.log10(abs(yfreqBHPF[0:n//1,0]+.0001)),'m-',lw=0.1)\n",
-        "        ax1.set_xlabel('Frequency (Hz)')\n",
-        "        ax1.set_ylabel('Amplitude')\n",
-        "        ax2.plot(data,'k-',label='Raw')\n",
-        "        ax2.plot(data_filtered,'m-',label='Filtered')\n",
-        "        ax2.set_xlim(0,10000)\n",
-        "        ax2.set_ylim(-1,1)\n",
-        "        ax2.set_ylabel('Amplitude (Norm Bits)')\n",
-        "        ax2.set_xlabel('Samples')\n",
-        "        ax2.legend(loc=2)\n",
-        "    print('Done!')\n",
-        "    return data_filtered\n",
-        "\n",
-        "def FFT_brickwallBR(filename,start,stop,wout=True,plot=True):\n",
-        "    \"\"\"\n",
-        "    Deletes frequencies below cutoff using brickwall. Beware of phase issues.\n",
-        "    Parameters\n",
-        "    ----------\n",
-        "    filename: string\n",
-        "        Name of the input <audio> file. Uses the soundfile python library\n",
-        "        to decode the input.\n",
-        "      \n",
-        "    cutoff: int (Hz)\n",
-        "        Frequency of the filter cutoff below which data is filtered out.\n",
-        "  \n",
-        "    wout: True/False, optional, default=True\n",
-        "        Writes the data to a 16 bit *.wav file. Equating to false will suppress\n",
-        "        *.wav output, for example if you want to chain process.\n",
-        "      \n",
-        "    plot: True/False, optional, default=True\n",
-        "        Produces plot of raw wave form and processed waveform.\n",
-        "    Returns\n",
-        "    -------\n",
-        "    data_filtered: array containing filtered audio in bits\n",
-        "    \"\"\"\n",
-        "    n, data, data_dB,sr,ch=inputwav(filename)\n",
-        "    print('Applying FFT...')\n",
-        "    yfreq=fft(data,axis=0)\n",
-        "    xfreq=np.linspace(0,sr/(2.0),n//2)\n",
-        "    yfreqBHPF=np.zeros((n,ch),dtype=complex)\n",
-        "    yfreqBHPF[0:n,:]=yfreq\n",
-        "    print('Applying brickwall centered at '+str((start+stop)/2)+' Hz...')\n",
-        "    yfreqBHPF[np.searchsorted(xfreq,start):np.searchsorted(xfreq,stop),:]=0.00001\n",
-        "    data_filtered=(ifft(yfreqBHPF,axis=0))\n",
-        "    if wout==True:\n",
-        "        print('Exporting...')\n",
-        "        sf.write(filename[0:len(filename)-4]+'_brickwallHPF.wav',data_filtered.real,sr,'PCM_16')\n",
-        "    if plot==True:\n",
-        "        print('Plotting...')\n",
-        "        py.close()\n",
-        "        fig, (ax1, ax2) = py.subplots(nrows=2)\n",
-        "        ax1.semilogx(xfreq,20*np.log10(abs(yfreq[0:n//2])),'k-',lw=0.5)\n",
-        "        ax1.semilogx(xfreq,20*np.log10(abs(yfreqBHPF[0:n//2,0])),'m-',lw=0.1)\n",
-        "        ax1.set_xlabel('Frequency (Hz)')\n",
-        "        ax1.set_ylabel('Amplitude (dB)')\n",
-        "        ax2.plot(data,'k-')\n",
-        "        ax2.plot(data_filtered,'m-')\n",
-        "        ax2.set_xlim(0,1000)\n",
-        "      # ax2.set_ylim(-1,1)\n",
-        "        ax2.set_ylabel('Amplitude (Norm Bits)')\n",
-        "        ax2.set_xlabel('Samples')\n",
-        "        ax2.legend(loc=2)\n",
-        "    print('Done!')\n",
-        "    return data_filtered\n",
-        "\n",
-        "def FFT_brickwallLPF(filename,cutoff,wout=True,plot=True):\n",
-        "    \"\"\"\n",
-        "    Deletes frequencies above cutoff using brickwall.\n",
-        "    Parameters\n",
-        "    ----------\n",
-        "    filename: string\n",
-        "        Name of the input <audio> file. Uses the soundfile python library\n",
-        "        to decode the input.\n",
-        "      \n",
-        "    cutoff: int (Hz)\n",
-        "        Frequency of the filter cutoff above which data is filtered out.\n",
-        "  \n",
-        "    wout: True/False, optional, default=True\n",
-        "        Writes the data to a 16 bit *.wav file. Equating to false will suppress\n",
-        "        *.wav output, for example if you want to chain process.\n",
-        "      \n",
-        "    plot: True/False, optional, default=True\n",
-        "        Produces plot of raw wave form and processed waveform.\n",
-        "    Returns\n",
-        "    -------\n",
-        "    n: length of song in samples\n",
-        "  \n",
-        "    data: array containing the signal in bits.\n",
-        "  \n",
-        "    data_dB: array containing the signal in dB.\n",
-        "  \n",
-        "    sr: sample rate\n",
-        "  \n",
-        "    ch: number of audio channels. 1 = mono, 2 = stereo\n",
-        "    \"\"\"\n",
-        "    start=time.time()\n",
-        "    n, data, data_dB,sr,ch=inputwav(filename)\n",
-        "    print('Applying FFT...')\n",
-        "    W=np.zeros((n,2))\n",
-        "    W[:,0]=1#blackman(n)\n",
-        "    W[:,1]=1#blackman(n)\n",
-        "    yfreq=rfft(data*W,axis=0)\n",
-        "    xfreq=np.linspace(0,sr/(2.0),n//1)\n",
-        "    yfreqBLPF=np.zeros((n,ch))\n",
-        "    yfreqBLPF[0:n,:]=yfreq\n",
-        "    print('Applying brickwall at '+str(cutoff)+' Hz...')\n",
-        "    yfreqBLPF[n:np.searchsorted(xfreq,cutoff):-1,:]=0.0\n",
-        "    data_filtered=(irfft(yfreqBLPF,axis=0))\n",
-        "    if wout==True:\n",
-        "        print('Exporting...')\n",
-        "        sf.write(filename[0:len(filename)-4]+'_brickwallLPF.wav',data_filtered,sr,'PCM_16')\n",
-        "    if plot==True:\n",
-        "        print('Plotting...')\n",
-        "        py.close()\n",
-        "        fig, (ax1, ax2) = py.subplots(nrows=2)\n",
-        "        ax1.semilogx(xfreq,20*np.log10(abs(yfreq[0:n//1,:]+.0001)),'k-',lw=0.5)\n",
-        "        ax1.semilogx(xfreq,20*np.log10(abs(yfreqBLPF[0:n//1,:]+.0001)),'m-',lw=0.1)\n",
-        "        ax1.set_xlabel('Frequency (Hz)')\n",
-        "        ax1.set_ylabel('Amplitude (dB)')\n",
-        "        ax2.plot(data,'k-',label='Raw')\n",
-        "        ax2.plot(data_filtered,'m-',lw=1,label='Filtered')\n",
-        "        ax2.set_xlim(0,10000)\n",
-        "        ax2.set_ylim(-1,1)\n",
-        "        ax2.set_ylabel('Amplitude (Norm Bits)')\n",
-        "        ax2.set_xlabel('Samples')\n",
-        "        ax2.legend(loc=2,frameon=False,ncol=2)\n",
-        "    print('Done!')\n",
-        "    end=time.time()\n",
-        "    elapsed=(end-start)\n",
-        "    print('Completed in '+str(elapsed)+' seconds.')\n",
-        "    return data_filtered\n",
-        "\n",
-        "\n",
-        "def LPF(filename,cutoff,Q=1,wout=True,plot=True):\n",
-        "    \"\"\"\n",
-        "    Lowpass filter.\n",
-        "    Parameters\n",
-        "    ----------\n",
-        "    filename: string\n",
-        "        Name of the input <audio> file. Uses the soundfile python library\n",
-        "        to decode the input.\n",
-        "      \n",
-        "    cutoff: int (Hz)\n",
-        "        Frequency of the filter cutoff above which data is filtered out.\n",
-        "      \n",
-        "    Q:  int, optional, default=1\n",
-        "        Number of poles in filter or steepness of filter edge.\n",
-        "  \n",
-        "    wout: True/False, optional, default=True\n",
-        "        Writes the data to a 16 bit *.wav file. Equating to false will suppress\n",
-        "        *.wav output, for example if you want to chain process.\n",
-        "      \n",
-        "    plot: True/False, optional, default=True\n",
-        "        Produces plot of raw wave form and processed waveform.\n",
-        "    Returns\n",
-        "    -------\n",
-        "    n: length of song in samples\n",
-        "  \n",
-        "    data: array containing the signal in bits.\n",
-        "  \n",
-        "    data_dB: array containing the signal in dB.\n",
-        "  \n",
-        "    sr: sample rate\n",
-        "  \n",
-        "    ch: number of audio channels. 1 = mono, 2 = stereo\n",
-        "    \"\"\"\n",
-        "    start=time.time()\n",
-        "    n, data, data_dB,sr,ch=inputwav(filename)\n",
-        "    b, a = butter(Q,cutoff/sr,btype='low')\n",
-        "    data_filtered=lfilter(b,a,data,axis=0)\n",
-        "    print('Applying FFT...')\n",
-        "    if wout==True:\n",
-        "        print('Exporting...')\n",
-        "        sf.write(filename[0:len(filename)-4]+'_LPF.wav',data_filtered,sr,'PCM_16')\n",
-        "    if plot==True:\n",
-        "        print('Plotting...')\n",
-        "        py.close()\n",
-        "        w, h = freqz(b,a,worN=1024)\n",
-        "        fig, (ax1, ax2) = py.subplots(nrows=2)\n",
-        "        ax1.semilogx(0.5*sr*w/np.pi,abs(h),'k--')\n",
-        "        ax1.set_xlabel('Frequency (Hz)')\n",
-        "        ax1.set_ylabel('Rel. Amplitude')\n",
-        "        ax1.grid()\n",
-        "        ax1.set_ylim(0,1.1)\n",
-        "        ax1.set_xlim(1,20000)\n",
-        "        ax2.plot(data,'k-',label='Raw data')\n",
-        "        ax2.plot(data_filtered,'m-',lw=1,label='Filtered data')\n",
-        "        ax2.set_xlim(0,10000)\n",
-        "        ax2.set_ylim(-1,1)\n",
-        "        ax2.set_ylabel('Amplitude (Norm Bits)')\n",
-        "        ax2.set_xlabel('Samples')\n",
-        "        ax2.legend(loc=2,frameon=False,ncol=2)\n",
-        "        py.subplots_adjust(hspace=0.35)    \n",
-        "    print('Done!')\n",
-        "    end=time.time()\n",
-        "    elapsed=int(1000*(end-start))\n",
-        "    print('...............................')\n",
-        "    print('Completed in '+str(elapsed)+' milliseconds.')\n",
-        "    return data_filtered\n",
-        "\n",
-        "def HPF(filename,cutoff,Q=1,wout=True,plot=True):\n",
-        "    \"\"\"\n",
-        "    Deletes frequencies above cutoff using brickwall.\n",
-        "    Parameters\n",
-        "    ----------\n",
-        "    filename: string\n",
-        "        Name of the input <audio> file. Uses the soundfile python library\n",
-        "        to decode the input.\n",
-        "      \n",
-        "    cutoff: int (Hz)\n",
-        "        Frequency of the filter cutoff above which data is filtered out.\n",
-        "  \n",
-        "    wout: True/False, optional, default=True\n",
-        "        Writes the data to a 16 bit *.wav file. Equating to false will suppress\n",
-        "        *.wav output, for example if you want to chain process.\n",
-        "      \n",
-        "    plot: True/False, optional, default=True\n",
-        "        Produces plot of raw wave form and processed waveform.\n",
-        "    Returns\n",
-        "    -------\n",
-        "    n: length of song in samples\n",
-        "  \n",
-        "    data: array containing the signal in bits.\n",
-        "  \n",
-        "    data_dB: array containing the signal in dB.\n",
-        "  \n",
-        "    sr: sample rate\n",
-        "  \n",
-        "    ch: number of audio channels. 1 = mono, 2 = stereo\n",
-        "    \"\"\"\n",
-        "    start=time.time()\n",
-        "    n, data, data_dB,sr,ch=inputwav(filename)\n",
-        "    b, a = butter(Q,cutoff/sr,btype='high')\n",
-        "    data_filtered=lfilter(b,a,data,axis=0)\n",
-        "    print('Applying FFT...')\n",
-        "    if wout==True:\n",
-        "        print('Exporting...')\n",
-        "        sf.write(filename[0:len(filename)-4]+'_HPF.wav',data_filtered,sr,'PCM_16')\n",
-        "    if plot==True:\n",
-        "        print('Plotting...')\n",
-        "        py.close()\n",
-        "        w, h = freqz(b,a,worN=16384)\n",
-        "        fig, (ax1, ax2) = py.subplots(nrows=2)\n",
-        "        ax1.semilogx(0.5*sr*w/np.pi,abs(h),'k--')\n",
-        "        ax1.set_title('Fiter Frequency Response')\n",
-        "        ax1.set_xlabel('Frequency (Hz)')\n",
-        "        ax1.set_ylabel('Rel. Amplitude')\n",
-        "        ax1.grid()\n",
-        "        ax1.set_ylim(0,1.1)\n",
-        "        ax1.set_xlim(1,20000)\n",
-        "        ax2.plot(data,'k-',label='Raw data')\n",
-        "        ax2.plot(data_filtered,'m-',lw=1,label='Filtered data')\n",
-        "        ax2.set_xlim(0,10000)\n",
-        "        ax2.set_ylim(-1,1)\n",
-        "        ax2.set_ylabel('Amplitude (Norm Bits)')\n",
-        "        ax2.set_xlabel('Samples')\n",
-        "        ax2.legend(loc=2,frameon=False,ncol=2)\n",
-        "        py.subplots_adjust(hspace=0.35)    \n",
-        "    print('Done!')\n",
-        "    end=time.time()\n",
-        "    elapsed=int(1000*(end-start))\n",
-        "    print('...............................')\n",
-        "    print('Completed in '+str(elapsed)+' milliseconds.')\n",
-        "    return data_filtered\n",
-        "\n",
-        "def bandpass(filename,f1,f2,Q,wout=True,plot=True):\n",
-        "    \"\"\"\n",
-        "    Filters frequency content outside of [f1,f2] domain.\n",
-        "    Parameters\n",
-        "    ----------\n",
-        "    filename: string\n",
-        "        Name of the input <audio> file. Uses the soundfile python library\n",
-        "        to decode the input.\n",
-        "      \n",
-        "    f1: int (Hz)\n",
-        "        Start frequency of the filter cutoff above which data is filtered out.\n",
-        "      \n",
-        "    f2: int (Hz)\n",
-        "        Stop frequency of the filter cutoff below which data is filtered out.\n",
-        "      \n",
-        "    Q:  int, optional, default=1\n",
-        "        Number of poles in filter or steepness of filter edge.\n",
-        "      \n",
-        "    wout: True/False, optional, default=True\n",
-        "        Writes the data to a 16 bit *.wav file. Equating to false will suppress\n",
-        "        *.wav output, for example if you want to chain process.\n",
-        "      \n",
-        "    plot: True/False, optional, default=True\n",
-        "        Produces plot of raw wave form and processed waveform.\n",
-        "    Returns\n",
-        "    -------\n",
-        "    n: length of song in samples\n",
-        "  \n",
-        "    data: array containing the signal in bits.\n",
-        "  \n",
-        "    data_dB: array containing the signal in dB.\n",
-        "  \n",
-        "    sr: sample rate\n",
-        "  \n",
-        "    ch: number of audio channels. 1 = mono, 2 = stereo\n",
-        "    \"\"\"\n",
-        "    start=time.time()\n",
-        "    n, data, data_dB,sr,ch=inputwav(filename)\n",
-        "    b, a = butter(Q,Wn=(f1/sr,f2/sr),btype='bandpass')\n",
-        "    data_filtered=lfilter(b,a,data,axis=0)\n",
-        "    print('Applying FFT...')\n",
-        "    if wout==True:\n",
-        "        print('Exporting...')\n",
-        "        sf.write(filename[0:len(filename)-4]+'_BP.wav',data_filtered,sr,'PCM_16')\n",
-        "    if plot==True:\n",
-        "        print('Plotting...')\n",
-        "        py.close()\n",
-        "        w, h = freqz(b,a,worN=16384)\n",
-        "        fig, (ax1, ax2) = py.subplots(nrows=2)\n",
-        "        ax1.semilogx(0.5*sr*w/np.pi,abs(h),'k-')\n",
-        "        ax1.set_xlabel('Frequency (Hz)')\n",
-        "        ax1.set_ylabel('Rel. Amplitude')\n",
-        "        ax1.grid()\n",
-        "        ax1.set_ylim(0,1.1)\n",
-        "        ax1.set_xlim(1,20000)\n",
-        "        ax2.plot(data,'k-',label='Raw data')\n",
-        "        ax2.plot(data_filtered,'m-',lw=1,label='Filtered data')\n",
-        "        ax2.set_xlim(0,10000)\n",
-        "        ax2.set_ylim(-1,1)\n",
-        "        ax2.set_ylabel('Amplitude (Norm Bits)')\n",
-        "        ax2.set_xlabel('Samples')\n",
-        "        ax2.legend(loc=2,frameon=False,ncol=2)\n",
-        "        py.subplots_adjust(hspace=0.35)    \n",
-        "    print('Done!')\n",
-        "    end=time.time()\n",
-        "    elapsed=int(1000*(end-start))\n",
-        "    print('...............................')\n",
-        "    print('Completed in '+str(elapsed)+' milliseconds.')\n",
-        "    return data_filtered\n",
-        "\n",
-        "def slow(filename,p=10,wout=True):\n",
-        "    \"\"\"\n",
-        "    Resamples the input by p%, slowing it down by p%. Uses the scipy resample\n",
-        "    function.\n",
-        "  \n",
-        "    Parameters\n",
-        "    ----------\n",
-        "    filename: string\n",
-        "        Name of the input <audio> file. Uses the soundfile python library\n",
-        "        to decode the input.\n",
-        "  \n",
-        "    p: float/int, optional, default=10\n",
-        "        percentage the audio is slowed by.\n",
-        "  \n",
-        "    wout: True/False, optional, default=True\n",
-        "        Writes the data to a 16 bit *.wav file. Equating to false will suppress\n",
-        "        *.wav output, for example if you want to chain process.\n",
-        "    Returns\n",
-        "    -------\n",
-        "    f: resampled data in bits\n",
-        "    \"\"\"\n",
-        "    n, data, data_dB,sr,ch=inputwav(filename)\n",
-        "    if p>0:\n",
-        "        print('Slowing...')\n",
-        "    if p<0:\n",
-        "        print('Warning: You are speeding up the audio! Use positive value'\n",
-        "              +' for p to slow.')\n",
-        "    f=resample(data,int(len(data)*(1+p/100.0)))\n",
-        "    if wout==True:\n",
-        "        print('Exporting...')\n",
-        "        sf.write(filename[0:len(filename)-4]+'_slow.wav',f,sr,'PCM_16')\n",
-        "        print('Done!')\n",
-        "    return f\n",
-        "\n",
-        "  \n",
-        "\n",
-        "def conv_reverb(filename,ir=\"vocalduo.wav\",wet=0.5,wout=True):  \n",
-        "    start=time.time()\n",
-        "    n, data, data_dB,sr,ch=inputwav(filename)\n",
-        "    n_IR, data_IR, data_dB_IR,sr_IR,ch_IR=inputwav(ir)\n",
-        "    print('Convolving impulse response with track...')\n",
-        "    convolution = convolve(n,n_IR,mode='full')\n",
-        "    for i in range(ch+1): #normalize the song\n",
-        "      convolution[:,i]=convolution[:,i]/max(convolution[:,i])\n",
-        "    song_pad = np.zeros(convolution[:,0:2].shape)\n",
-        "    for i in range(ch):\n",
-        "      song_pad[0:len(song)]=song\n",
-        "    print('Mixing...')\n",
-        "    final = wet*song_pad+(1-wet)*convolution[:,0:2]\n",
-        "    if wout==True:\n",
-        "        print('Exporting...')\n",
-        "        sf.write(filename[0:len(filename)-4]+'_verbed.wav',data_verb,sr,'PCM_16')\n",
-        "    print('Done!')\n",
-        "    end=time.time()\n",
-        "    elapsed=int(1000*(end-start))\n",
-        "    print('...............................')\n",
-        "    print('Completed in '+str(elapsed)+' milliseconds.')\n",
-        "    return data_verb\n",
-        "\n",
-        "\n",
-        "\n",
-        "def verb_delay(filename,l,t,d,wout=True): #l = predelay   d= decay smaller = less decay, t= number of delays\n",
-        "#low l turns into chorus\n",
-        "    \"\"\"\n",
-        "    Repeats sound to form delay or reverb with appropriate parameters.\n",
-        "  \n",
-        "    Parameters\n",
-        "    ----------\n",
-        "    filename: string\n",
-        "        Name of the input <audio> file. Uses the soundfile python library\n",
-        "        to decode the input.\n",
-        "  \n",
-        "    l:  int\n",
-        "        Spacing between samples in units of sample. Serves as \"predelay\"\n",
-        "        or the delay spacing.\n",
-        "          \n",
-        "    t:  int\n",
-        "        Number of delays or repetitions produced.\n",
-        "      \n",
-        "    d:  float\n",
-        "        Characteristic decay time of the feedback.\n",
-        "  \n",
-        "    wout: True/False, optional, default=True\n",
-        "        Writes the data to a 16 bit *.wav file. Equating to false will suppress\n",
-        "        *.wav output, for example if you want to chain process.\n",
-        "    Returns\n",
-        "    -------\n",
-        "    data_verb: Data with reverb added in bit units.\n",
-        "    \"\"\"\n",
-        "    start=time.time()\n",
-        "    n, data, data_dB,sr,ch=inputwav(filename)\n",
-        "    data_ex=np.zeros(((n+l*t),ch))\n",
-        "    data_ex[0:n,:]=data\n",
-        "    data_Rex=np.zeros((len(data_ex),t,ch))\n",
-        "    print('Applying reverb...')\n",
-        "    for k in range (ch):\n",
-        "        for i in range (len(data)):\n",
-        "            for j in range(t):\n",
-        "                data_Rex[i+l*(j+1),j,k]=data_ex[i,k]*np.exp(-d*(j+1))\n",
-        "    data_F=data_ex\n",
-        "    print('Mixing...')\n",
-        "    for i in range (t):\n",
-        "        data_F=data_F+1*data_Rex[:,i,:]\n",
-        "    data_F=1*data_F\n",
-        "    data_verb=data_F+data_ex\n",
-        "    if wout==True:\n",
-        "        print('Exporting...')\n",
-        "        sf.write(filename[0:len(filename)-4]+'_verbed.wav',data_verb,sr,'PCM_16')\n",
-        "    print('Done!')\n",
-        "    end=time.time()\n",
-        "    elapsed=int(1000*(end-start))\n",
-        "    print('...............................')\n",
-        "    print('Completed in '+str(elapsed)+' milliseconds.')\n",
-        "    return data_verb\n",
-        "\n",
-        "\n",
-        "\n",
-        "def compress(filename,threshold,ratio,makeup,attack,release,wout=True,plot=False):\n",
-        "    \"\"\"\n",
-        "    Reduces dynamic range of input signal by reducing volume above threshold.\n",
-        "    The gain reduction is smoothened according to the attack and release.\n",
-        "    Makeup gain must be added manually.\n",
-        "    Parameters\n",
-        "    ----------\n",
-        "    filename: string\n",
-        "        Name of the input *.wav file.\n",
-        "    threshold: scalar (dB)\n",
-        "        value in dB of the threshold at which the compressor engages in\n",
-        "        gain reduction.\n",
-        "    ratio: scalar\n",
-        "        The ratio at which volume is reduced for every dB above the threshold\n",
-        "        (i.e. r:1)\n",
-        "        For compression to occur, ratio should be above 1.0. Below 1.0, you\n",
-        "        are expanding the signal.\n",
-        "      \n",
-        "    makeup: scalar (dB)\n",
-        "        Amount of makeup gain to apply to the compressed signal\n",
-        "  \n",
-        "    attack: scalar (ms)\n",
-        "        Characteristic time required for compressor to apply full gain\n",
-        "        reduction. Longer times allow transients to pass through while short\n",
-        "        times reduce all of the signal. Distortion will occur if the attack\n",
-        "        time is too short.\n",
-        "  \n",
-        "    release: scalar (ms)\n",
-        "        Characteristic time that the compressor will hold the gain reduction\n",
-        "        before easing off. Both attack and release basically smoothen the gain\n",
-        "        reduction curves.\n",
-        "      \n",
-        "    wout: True/False, optional, default=True\n",
-        "        Writes the data to a 16 bit *.wav file. Equating to false will suppress\n",
-        "        *.wav output, for example if you want to chain process.\n",
-        "      \n",
-        "    plot: True/False, optional, default=True\n",
-        "        Produces plot of waveform and gain reduction curves.\n",
-        "  \n",
-        "      \n",
-        "    Returns\n",
-        "    -------\n",
-        "    data_Cs: array containing the compressed waveform in dB\n",
-        "    data_Cs_bit: array containing the compressed waveform in bits.\n",
-        "    \"\"\"\n",
-        "    start=time.time()\n",
-        "    if ratio < 1.0:\n",
-        "        print('Ratio must be > 1.0 for compression to occur! You are expanding.')\n",
-        "    if ratio==1.0:\n",
-        "        print('Signal is unaffected.')\n",
-        "    n, data, data_dB,sr,ch=inputwav(filename)\n",
-        "    #Array for the compressed data in dB\n",
-        "    dataC=data_dB.copy()\n",
-        "    #attack and release time constant\n",
-        "    a=np.exp(-np.log10(9)/(44100*attack*1.0E-3))\n",
-        "    re=np.exp(-np.log10(9)/(44100*release*1.0E-3))\n",
-        "    #apply compression\n",
-        "    print('Compressing...')\n",
-        "    for k in range(ch):\n",
-        "        for i in range (n):\n",
-        "            if dataC[i,k]>threshold:\n",
-        "                dataC[i,k]=threshold+(dataC[i,k]-threshold)/(ratio)\n",
-        "    #gain and smooth gain initialization\n",
-        "    gain=np.zeros(n)\n",
-        "    sgain=np.zeros(n)\n",
-        "    #calculate gain\n",
-        "    gain=np.subtract(dataC,data_dB)\n",
-        "    sgain=gain.copy()\n",
-        "    #smoothen gain\n",
-        "    print('Smoothing...')\n",
-        "    for k in range(ch):\n",
-        "        for i in range (1,n):\n",
-        "            if sgain[i-1,k]>=sgain[i,k]:\n",
-        "                sgain[i,k]=a*sgain[i-1,k]+(1-a)*sgain[i,k]\n",
-        "            if sgain[i-1,k]<sgain[i,k]:\n",
-        "                sgain[i,k]=re*sgain[i-1,k]+(1-re)*sgain[i,k]    \n",
-        "    #Array for the smooth compressed data with makeup gain applied\n",
-        "    dataCs=np.zeros(n)\n",
-        "    dataCs=data_dB+sgain+makeup\n",
-        "    #Convert our dB data back to bits\n",
-        "    dataCs_bit=10.0**((dataCs)/20.0)\n",
-        "    #sign the bits appropriately:\n",
-        "    for k in range (ch):\n",
-        "        for i in range (n):\n",
-        "            if data[i,k]<0.0:\n",
-        "                dataCs_bit[i,k]=-1.0*dataCs_bit[i,k]\n",
-        "    #Plot the data:\n",
-        "    if plot==True:\n",
-        "        print('Plotting...')\n",
-        "        t=np.linspace(0,n/(1.0*sr),n)\n",
-        "        py.close()\n",
-        "        fig, (ax1, ax2) = py.subplots(nrows=2)  \n",
-        "        ax2.plot(t,gain,'k-',linewidth=0.1,label='Gain Reduction')\n",
-        "        ax2.plot(t,sgain,'r-',linewidth=1, label='Gain Reduction Smooth')\n",
-        "        ax1.plot(t,data,'k-',linewidth=1,label=filename)\n",
-        "        ax1.plot(t,dataCs_bit,'m-',linewidth=0.1,\n",
-        "                label=filename+' compressed')\n",
-        "        ax1.axhline(10**(threshold/20.0),linestyle='-',\n",
-        "                    color='cyan',linewidth=1)\n",
-        "        ax1.axhline(-10**(threshold/20.0),linestyle='-',\n",
-        "                    color='cyan',linewidth=1)\n",
-        "        ax1.legend()\n",
-        "        ax2.legend()\n",
-        "        ax2.set_xlabel('Time (s)')\n",
-        "        ax2.set_ylabel('Gain Reduction (dB)')\n",
-        "        ax1.set_ylabel('Amplitude (Rel. Bit)')\n",
-        "        ax1.set_xlabel('Time (s)')\n",
-        "    #write data to 16 bit file\n",
-        "    if wout==True:\n",
-        "        print('Exporting...')\n",
-        "        sf.write(filename[0:len(filename)-4]+'_compressed.wav',dataCs_bit,\n",
-        "                sr,'PCM_16')\n",
-        "    end=time.time()\n",
-        "    elapsed=int(1000*(end-start))\n",
-        "    print('Done!')\n",
-        "    print('...............................')\n",
-        "    print('Completed in '+str(elapsed)+' milliseconds.')    \n",
-        "    return dataCs,dataCs_bit\n",
-        "\n",
-        "def gate(filename,threshold,ratio,attack,release,wout=True,plot=True):\n",
-        "    \"\"\"\n",
-        "    Reduces dynamic range of input signal by reducing volume above threshold.\n",
-        "    The gain reduction is smoothened according to the attack and release.\n",
-        "    Makeup gain must be added manually.\n",
-        "    Parameters\n",
-        "    ----------\n",
-        "    filename : string\n",
-        "        Name of the input *.wav file.\n",
-        "    threshold : scalar (dB)\n",
-        "        value in dB of the threshold at which the compressor engages in\n",
-        "        gain reduction.\n",
-        "    ratio : scalar\n",
-        "        The ratio at which volume is reduced for every dB above the threshold\n",
-        "        (i.e. r:1)\n",
-        "        For compression to occur, ratio should be above 1.0. Below 1.0, you\n",
-        "        are expanding the signal.\n",
-        "      \n",
-        "    makeup: scalar (dB)\n",
-        "        Amount of makeup gain to apply to the compressed signal\n",
-        "  \n",
-        "    attack: scalar (ms)\n",
-        "        Characteristic time required for compressor to apply full gain\n",
-        "        reduction. Longer times allow transients to pass through while short\n",
-        "        times reduce all of the signal. Distortion will occur if the attack\n",
-        "        time is too short.\n",
-        "  \n",
-        "    release: scalar (ms)\n",
-        "        Characteristic time that the compressor will hold the gain reduction\n",
-        "        before easing off. Both attack and release basically smoothen the gain\n",
-        "        reduction curves.\n",
-        "      \n",
-        "    wout: True/False, optional, default=True\n",
-        "        Writes the data to a 16 bit *.wav file. Equating to false will suppress\n",
-        "        *.wav output, for example if you want to chain process.\n",
-        "      \n",
-        "    plot: True/False, optional, default=True\n",
-        "        Produces plot of waveform and gain reduction curves.\n",
-        "  \n",
-        "      \n",
-        "    Returns\n",
-        "    -------\n",
-        "    data_Cs: array containing the compressed waveform in dB\n",
-        "    data_Cs_bit: array containing the compressed waveform in bits.\n",
-        "    \"\"\"\n",
-        "    start=time.time()\n",
-        "    if ratio < 1.0:\n",
-        "        print('Ratio must be > 1.0 for compression to occur! You are expanding.')\n",
-        "    if ratio==1.0:\n",
-        "        print('Signal is unaffected.')\n",
-        "    n, data, data_dB,sr,ch=inputwav(filename)\n",
-        "    #Array for the compressed data in dB\n",
-        "    dataC=data_dB.copy()\n",
-        "    #attack and release time constant\n",
-        "    a=np.exp(-np.log10(9)/(44100*attack*1.0E-3))\n",
-        "    re=np.exp(-np.log10(9)/(44100*release*1.0E-3))\n",
-        "    #apply compression\n",
-        "    print('Compressing...')\n",
-        "    for k in range (ch):\n",
-        "        for i in range (n):\n",
-        "            if dataC[i,k]<threshold:\n",
-        "                dataC[i,k]=-100\n",
-        "    #Array for the smooth compressed data with makeup gain applied\n",
-        "    #Convert our dB data back to bits\n",
-        "    dataCs_bit=10.0**((dataC)/20.0)\n",
-        "    #sign the bits appropriately:\n",
-        "    for k in range (ch):\n",
-        "        for i in range (len(data)):\n",
-        "            if data[i,k]<0.0:\n",
-        "                dataCs_bit[i,k]=-1.0*dataCs_bit[i,k]\n",
-        "    #Plot the data:\n",
-        "    if plot==True:\n",
-        "        print('Plotting...')\n",
-        "        t=np.linspace(0,n/(1.0*sr),n)\n",
-        "        py.close()\n",
-        "        fig, (ax1, ax2) = py.subplots(nrows=2)  \n",
-        "        #ax2.plot(t,gain,'k-',linewidth=0.1,label='Gain Reduction')\n",
-        "        #ax2.plot(t,sgain,'r-',linewidth=1, label='Gain Reduction Smooth')\n",
-        "        ax1.plot(t,data,'k-',linewidth=1,label=filename)\n",
-        "        ax1.plot(t,dataCs_bit,'m-',linewidth=0.1,\n",
-        "                label=filename+' compressed')\n",
-        "        ax1.axhline(10**(threshold/20.0),linestyle='-',\n",
-        "                    color='cyan',linewidth=1)\n",
-        "        ax1.axhline(-10**(threshold/20.0),linestyle='-',\n",
-        "                    color='cyan',linewidth=1)\n",
-        "        ax1.legend()\n",
-        "        ax2.legend()\n",
-        "        ax2.set_xlabel('Time (s)')\n",
-        "        ax2.set_ylabel('Gain Reduction (dB)')\n",
-        "        ax1.set_ylabel('Amplitude (Rel. Bit)')\n",
-        "        ax1.set_xlabel('Time (s)')\n",
-        "    #write data to 16 bit file\n",
-        "    if wout==True:\n",
-        "        print('Exporting...')\n",
-        "        sf.write(filename[0:len(filename)-4]+'_gated.wav',dataCs_bit,\n",
-        "                sr,'PCM_16')\n",
-        "    end=time.time()\n",
-        "    elapsed=int(1000*(end-start))\n",
-        "    print('Done!')\n",
-        "    print('...............................')\n",
-        "    print('Completed in '+str(elapsed)+' milliseconds.')    \n",
-        "    return dataC,dataCs_bit\n",
-        "\n",
-        "def limit(filename,threshold,makeup,wout=True,plot=False):\n",
-        "    \"\"\"\n",
-        "    Limits the data above the threshold. Compression with high ratio and long\n",
-        "    release with fairly quick attack.\n",
-        "    Parameters\n",
-        "    ----------\n",
-        "    filename : string\n",
-        "        Name of the input *.wav file.\n",
-        "    threshold : scalar (dB)\n",
-        "        value in dB of the threshold above which signal is limited\n",
-        "      \n",
-        "    makeup: scalar (dB)\n",
-        "        Amount of makeup gain to apply to the compressed signal\n",
-        "  \n",
-        "    attack: scalar (ms)\n",
-        "        Characteristic time required for compressor to apply full gain\n",
-        "        reduction. Longer times allow transients to pass through while short\n",
-        "        times reduce all of the signal. Distortion will occur if the attack\n",
-        "        time is too short.\n",
-        "  \n",
-        "    release: scalar (ms)\n",
-        "        Characteristic time that the compressor will hold the gain reduction\n",
-        "        before easing off. Both attack and release basically smoothen the gain\n",
-        "        reduction curves.\n",
-        "      \n",
-        "    wout: True/False, optional, default=True\n",
-        "        Writes the data to a 16 bit *.wav file. Equating to false will suppress\n",
-        "        *.wav output, for example if you want to chain process without creating\n",
-        "        too many files.\n",
-        "      \n",
-        "    plot: True/False, optional, default =True\n",
-        "        Produces plot of waveform and gain reduction curves.\n",
-        "  \n",
-        "      \n",
-        "    Returns\n",
-        "    -------\n",
-        "    dataL: array containing the limited waveform in dB\n",
-        "  \n",
-        "    dataL_bit: array containing the limited waveform in bits.\n",
-        "    \"\"\"\n",
-        "    start=time.time()\n",
-        "    n, data, data_dB,sr,ch=inputwav(filename)\n",
-        "    dataL,dataL_bit=compress(filename,threshold,1000.0,makeup,1.0,500.0,wout=False,plot=plot)\n",
-        "    if wout==True:\n",
-        "        print('Exporting...')\n",
-        "        sf.write(filename[0:len(filename)-4]+'_limit.wav',dataL_bit,44100,'PCM_16')\n",
-        "    end=time.time()\n",
-        "    elapsed=int(1000*(end-start))\n",
-        "    print('Done!')\n",
-        "    print('...............................')\n",
-        "    print('Completed in '+str(elapsed)+' milliseconds.')    \n",
-        "    return dataL,dataL_bit\n",
-        "\n",
-        "def distort(filename,threshold=0.25,type='arctan',wout=True,plot=False):\n",
-        "    \"\"\"\n",
-        "    Applies distortion to signal. Reshapes the signal above user input\n",
-        "    threshold (in bits).\n",
-        "    Parameters\n",
-        "    ----------\n",
-        "    filename : string\n",
-        "        Name of the input *.wav file.\n",
-        "    threshold : scalar \n",
-        "        lower = more distortion, try 0.25 for heavy distortion.\n",
-        "      \n",
-        "    type: string, optional, default=cubic\n",
-        "        Type of distortion that is applied. Default is arctan. more will be added\n",
-        "          soon.\n",
-        "      \n",
-        "    wout: True/False, optional, default=True\n",
-        "        Writes the data to a 16 bit *.wav file. Equating to false will suppress\n",
-        "        *.wav output, for example if you want to chain process without creating\n",
-        "        too many files.\n",
-        "      \n",
-        "    plot: True/False, optional, default =True\n",
-        "        Produces plot of input and output waveforms.\n",
-        "  \n",
-        "    Returns\n",
-        "    -------\n",
-        "    dataD: array containing the limited waveform in bits\n",
-        "    \"\"\"\n",
-        "    start=time.time()\n",
-        "    n, data, data_dB,sr,ch=inputwav(filename)\n",
-        "    dataD=np.zeros((len(data),ch))\n",
-        "    dataD[:len(data),:]=data#data_dB\n",
-        "    if type=='arctan':\n",
-        "        print('Applying arctan distortion...')\n",
-        "        for k in range(ch):\n",
-        "            for i in range (0,len(data)):\n",
-        "                dataD[i,k]=(2/np.pi)*np.arctan((np.pi / threshold)*dataD[i,k])\n",
-        "    if wout==True:\n",
-        "        print('Exporting...')\n",
-        "        sf.write(filename[0:len(filename)-4]+'_distort.wav',dataD,sr,'PCM_16')\n",
-        "    #PLOTTING#\n",
-        "    if plot==True:\n",
-        "        print('Plotting...')\n",
-        "        t=np.linspace(0,n/(1.0*sr),n)\n",
-        "        py.close()\n",
-        "        fig, (ax1) = py.subplots(nrows=1)  \n",
-        "        ax1.plot(t,data,'k-',linewidth=1,label=filename)\n",
-        "        ax1.plot(t,dataD,'m-',linewidth=0.5,\n",
-        "                label=filename+' distorted')\n",
-        "        ax1.axhline(threshold,linestyle='-',\n",
-        "                    color='cyan',linewidth=1)\n",
-        "        ax1.axhline(-threshold,linestyle='-',\n",
-        "                    color='cyan',linewidth=1)\n",
-        "        ax1.legend(loc=1)\n",
-        "        ax1.set_ylabel('Amplitude (Rel. Bit)')\n",
-        "        ax1.set_xlabel('Time (s)')\n",
-        "    end=time.time()\n",
-        "    elapsed=int(1000*(end-start))\n",
-        "    print('Done!')\n",
-        "    print('...............................')\n",
-        "    print('Completed in '+str(elapsed)+' milliseconds.')        \n",
-        "    return dataD\n",
-        "\n",
-        "def stereo(filename,time,wout=True):\n",
-        "    \"\"\"\n",
-        "    Produces stereo effect. If file is mono, two channels are created and the\n",
-        "    R channel is delayed to simulate stereo width. Beware of phase issues.\n",
-        "    Parameters\n",
-        "    ----------\n",
-        "    filename : string\n",
-        "        Name of the input *.wav file.\n",
-        "    time : scalar (ms)\n",
-        "        Amount of time the right channel is delayed by, in milliseconds.\n",
-        "      \n",
-        "    wout: True/False, optional, default=True\n",
-        "        Writes the data to a 16 bit *.wav file. Equating to false will suppress\n",
-        "        *.wav output, for example if you want to chain process without creating\n",
-        "        too many files.\n",
-        "      \n",
-        "    Returns\n",
-        "    -------\n",
-        "    data_st: array containing the stereo waveform in normalized bits.\n",
-        "    \"\"\"\n",
-        "    n, data, data_dB,sr,ch=inputwav(filename)\n",
-        "    s_shift=int(sr*time*1E-3)\n",
-        "    R=np.zeros(n)\n",
-        "    L=np.zeros(n)\n",
-        "    if  ch==2:\n",
-        "        L[:]=data[:,0]\n",
-        "        R[:]=data[:,1]\n",
-        "    if ch==1:\n",
-        "        L[:]=data[:,0]\n",
-        "        R[:]=data[:,0]\n",
-        "    print('Applying stereo width...')\n",
-        "    for i in range (n-s_shift):\n",
-        "        R[i]=R[i+s_shift]\n",
-        "    data_st=np.zeros((n,2))\n",
-        "    data_st[:,0]=L[:]\n",
-        "    data_st[:,1]=R[:]\n",
-        "    if wout==True:\n",
-        "        print('Exporting...')\n",
-        "        sf.write(filename[0:len(filename)-4]+'_stereo.wav',data_st,44100,'PCM_16')\n",
-        "    print ('Done!')\n",
-        "    return data_st\n",
-        "\n",
-        "def chorus(filename,s=False,wout=True):\n",
-        "    \"\"\"\n",
-        "    Produces chorus effect on input\n",
-        "    Parameters\n",
-        "    ----------\n",
-        "    filename : string\n",
-        "        Name of the input *.wav file.\n",
-        "    wout: True/False, optional, default=True\n",
-        "        Writes the data to a 16 bit *.wav file. Equating to false will suppress\n",
-        "        *.wav output, for example if you want to chain process without creating\n",
-        "        too many files.\n",
-        "      \n",
-        "    Returns\n",
-        "    -------\n",
-        "    data_m: array containing the stereo waveform in normalized bits.\n",
-        "    \"\"\"\n",
-        "    n, data, data_dB,sr,ch=inputwav(filename)\n",
-        "    data_1=slow(filename,p=0.1,wout=False)\n",
-        "    data_2=slow(filename,p=-0.1,wout=False)\n",
-        "    data_2pd=np.zeros((len(data_1),ch))\n",
-        "    data_2pd[0:len(data_2),:]=data_2\n",
-        "    data_pd=np.zeros((len(data_1),ch))\n",
-        "    data_pd[0:len(data),:]=data\n",
-        "    if s==True:\n",
-        "        print('Adding stereo chorus...')\n",
-        "        sf.write('./chorusw.wav',data_1+data_2pd,44100,'PCM_24')\n",
-        "        st=stereo('chorusw.wav',2,wout=False)\n",
-        "        data_F=data_pd+0.3*st\n",
-        "    else:\n",
-        "        print('Adding mono chorus...')\n",
-        "        data_F=data_pd+0.81*data_1+0.8*data_2pd\n",
-        "    if wout==True:\n",
-        "        print('Exporting...')\n",
-        "        sf.write('./chorus.wav',data_F,44100,'PCM_24')\n",
-        "    os.remove('chorusw.wav')\n",
-        "    print('Done!')\n",
-        "    return data_F\n",
-        "\n",
-        "def view(filename):\n",
-        "    \"\"\"\n",
-        "    Plots waveform of input audio file. Note that every 100th data point is\n",
-        "    plotted for faster performance\n",
-        "    Parameters\n",
-        "    ----------\n",
-        "    filename : string\n",
-        "        Name of the input *.wav file.\n",
-        "    \"\"\"\n",
-        "    n, data, data_dB,sr,ch=inputwav(filename)\n",
-        "    t=np.linspace(0,n/sr,n)\n",
-        "    py.close()\n",
-        "    fig, (ax1) = py.subplots(nrows=1)  \n",
-        "    ax1.plot(t[0:n:100],data[0:n:100],'k-',linewidth=1,label=filename)\n",
-        "    ax1.legend(loc=1)\n",
-        "    ax1.set_ylabel('Amplitude (Rel. Bit)')\n",
-        "    ax1.set_xlabel('Time (s)')\n",
-        "    \n",
-        "\n",
-        "def mono(filename,wout=True):\n",
-        "    \"\"\"\n",
-        "    Converts a stereo track to mono.\n",
-        "    Parameters\n",
-        "    ----------\n",
-        "    filename : string\n",
-        "        Name of the input *.wav file.\n",
-        "    wout: True/False, optional, default=True\n",
-        "        Writes the data to a 16 bit *.wav file. Equating to false will suppress\n",
-        "        *.wav output, for example if you want to chain process without creating\n",
-        "        too many files.\n",
-        "      \n",
-        "    Returns\n",
-        "    -------\n",
-        "    data_m: array containing the stereo waveform in normalized bits.\n",
-        "    \"\"\"\n",
-        "    n, data, data_dB,sr,ch=inputwav(filename)\n",
-        "    if  ch==2:\n",
-        "        print('Converting to mono...')\n",
-        "        L=data[:,0]\n",
-        "        R=data[:,1]\n",
-        "        n=len(data)\n",
-        "        data_m=np.zeros((n,1))\n",
-        "        data_m=L/2.0+R/2.0\n",
-        "        if wout==True:\n",
-        "            print('Exporting...')\n",
-        "            sf.write(filename[0:len(filename)-4]+'_mono.wav',data_m,sr,'PCM_16')\n",
-        "        print('Done!')\n",
-        "        return data_m\n",
-        "    else:\n",
-        "        print( \"Error: input is already mono stoooooooooopid!\")\n",
-        "        \n",
-        "        \n",
-        "def snip(filename,s,e,wout=True):\n",
-        "    \"\"\"\n",
-        "    Converts a stereo track to mono.\n",
-        "    Parameters\n",
-        "    ----------\n",
-        "    filename : string\n",
-        "        Name of the input *.wav file.\n",
-        "    wout: True/False, optional, default=True\n",
-        "        Writes the data to a 16 bit *.wav file. Equating to false will suppress\n",
-        "        *.wav output, for example if you want to chain process without creating\n",
-        "        too many files.\n",
-        "      \n",
-        "    Returns\n",
-        "    -------\n",
-        "    data_m: array containing the stereo waveform in normalized bits.\n",
-        "    \"\"\"\n",
-        "    n, data, data_dB,sr,ch=inputwav(filename)\n",
-        "    st=int(s*44100)\n",
-        "    en=int(e*44100)\n",
-        "    data_s=data[st:en,:]\n",
-        "    if wout==True:\n",
-        "        print('Exporting...')\n",
-        "        sf.write(filename[0:len(filename)-4]+'_snipped.wav',data_s,sr,'PCM_16')\n",
-        "    print('Done!')\n",
-        "    return data_s\n",
-        "\n",
-        "def mix(f1,f2,r):\n",
-        "    n, data, data_dB,sr,ch=inputwav(f1)\n",
-        "    n1, data1, data_dB1,sr1,ch1=inputwav(f2)\n",
-        "    data_sum=r*data+(1-r)*data1\n",
-        "    sf.write(f1[0:len(f1)-4]+f2,data_sum,sr,'PCM_16')\n",
-        "\n",
-        "def drakify(filename):\n",
-        "    compress(filename,1,1,-20,1,1,wout=True,plot=False)\n",
-        "    slow(filename[0:len(filename)-4]+'_compressed.wav',wout=True,p=20)\n",
-        "    conv_reverb(filename[0:len(filename)-4]+'_compressed_slow.wav')\n",
-        "    os.replace(filename[0:len(filename)-4]+'_compressed_slow_verbed.wav',filename[0:len(filename)-4]+'_drakify.wav')\n",
-        "    os.remove(filename[0:len(filename)-4]+'_compressed_slow.wav')\n",
-        "    os.remove(filename[0:len(filename)-4]+'_compressed.wav')\n",
-        "    normalize(filename[0:len(filename)-4]+'_drakify.wav')\n",
-        "    os.remove(filename[0:len(filename)-4]+'_drakify.wav')\n",
-        "    #print(3)\n",
-        "    \n",
-        "def drakifyD(filename):\n",
-        "    slow(filename,wout=True)\n",
-        "    distort(filename[0:len(filename)-4]+'_slow.wav',0.1,type='flat')\n",
-        "    conv_reverb(filename[0:len(filename)-4]+'_slow_distort.wav')\n",
-        "    os.replace(filename[0:len(filename)-4]+'_slow_distort_verbed.wav',filename[0:len(filename)-4]+'_drakifyD.wav')\n",
-        "    os.remove(filename[0:len(filename)-4]+'_slow.wav')\n",
-        "    #print(3)    \n",
-        "    \n",
-        "def drakifyL(filename):\n",
-        "    slow(filename,wout=True)\n",
-        "    limit(filename[0:len(filename)-4]+'_slow.wav',-20,7)\n",
-        "    conv_reverb(filename[0:len(filename)-4]+'_slow_limit.wav')\n",
-        "    os.replace(filename[0:len(filename)-4]+'_slow_limit_verbed.wav',filename[0:len(filename)-4]+'_drakifyL.wav')\n",
-        "    os.remove(filename[0:len(filename)-4]+'_slow.wav')\n",
-        "    #print(3)       \n",
-        "  \n",
-        "def robot(filename,wout=True):\n",
-        "    verb_delay(filename,1000,10,.000000009)\n",
-        "    os.replace(filename[0:len(filename)-4]+'_verbed.wav',filename[0:len(filename)-4]+'_robot.wav')\n",
-        "  \n",
-        "def choverb(filename,wout=True):\n",
-        "    verb_delay(filename,100,1,.00000000001)\n",
-        "    os.replace(filename[0:len(filename)-4]+'_verbed.wav',filename[0:len(filename)-4]+'_choverb.wav')\n",
-        "  \n",
-        "def verberator(filename,wout=True):\n",
-        "    verb_delay(filename,10000,3,.01)\n",
-        "    os.replace(filename[0:len(filename)-4]+'_verbed.wav',filename[0:len(filename)-4]+'_verberator.wav')\n",
-        "  \n",
-        "def robot2(filename,wout=True):\n",
-        "    verb_delay(filename,500,10,.000001)\n",
-        "    os.replace(filename[0:len(filename)-4]+'_verbed.wav',filename[0:len(filename)-4]+'_robot2.wav')\n",
-        "  \n",
-        "def long(filename,wout=True):\n",
-        "    verb_delay(filename,5000,20,.1)\n",
-        "    os.replace(filename[0:len(filename)-4]+'_verbed.wav',filename[0:len(filename)-4]+'_long.wav')\n",
-        "  \n",
-        "def telephone(filename,wout=True):\n",
-        "    bandpass(filename,300,3400,3)\n",
-        "    os.replace(filename[0:len(filename)-4]+'_BP.wav',filename[0:len(filename)-4]+'_telephone.wav')\n",
-        "\n",
-        "def bluetoothspeaker(filename):\n",
-        "    normalize(filename)\n",
-        "    LPF(filename[0:len(filename)-4]+'_normalized.wav',400,Q=2)\n",
-        "    distort(filename[0:len(filename)-4]+'_normalized_LPF.wav',0.41,type='digital')\n",
-        "    os.replace(filename[0:len(filename)-4]+'_normalized_LPF_distort.wav',filename[0:len(filename)-4]+'_btspeaker.wav')\n",
-        "    os.remove(filename[0:len(filename)-4]+'_normalized_LPF.wav')\n",
-        "    os.remove(filename[0:len(filename)-4]+'_normalized.wav')"
-      ]
-    }
-  ]
-}
+"""
+Created on Sat Jun 06 20:47:37 2020
+@author: Shayan
+"""
+import numpy as np
+import pylab as py
+from scipy.fftpack import fft,ifft,rfft,irfft
+from scipy.signal import blackman,hamming,chebwin,resample,stft,butter,lfilter,convolve
+from scipy.signal import freqz
+import soundfile as sf
+import os
+import time
+
+
+def inputwav(filename):
+    """
+    Decodes input file using "soundfile" library. Determines if file is
+    mono or stereo and converts data to dB.
+    Parameters
+    ----------
+    filename: string
+        Name of the input <audio> file. Uses the soundfile python library
+        to decode the input.
+    Returns
+    -------
+    n: length of audio in samples
+  
+    data: array containing the signal in bits.
+  
+    data_dB: array containing the signal in dB.
+  
+    sr: sample rate
+  
+    ch: number of audio channels. 1 = mono, 2 = stereo
+    """
+    data, sr = sf.read(filename)
+    print('Decoding "'+filename+'"...')
+    print('Sample rate is '+str(sr)+'...')
+    try:
+        ch=len(data[0,])
+    except:
+        ch=1
+    print('File contains '+str(ch)+' audio channel(s)...')
+    #Reshape the data so other functions can interpret the array if mono.
+    #basically transposing the data
+    if ch==1:
+        data=data.reshape(-1,1)
+    n=len(data)
+    #This prevents log(data) producing nan when data is 0
+    data[np.where(data==0)]=0.00001
+    #convert to dB
+    data_dB=20*np.log10(abs(data))
+    return n, data,data_dB,sr, ch
+
+def normalize(filename,wout=True):
+    """
+    Normalize volume to 0 dB.
+    Parameters
+    ----------
+    filename: string
+        Name of the input <audio> file. Uses the soundfile python library
+        to decode the input.
+      
+    wout: True/False, optional, default=True
+        Writes the data to a 16 bit *.wav file. Equating to false will suppress
+        *.wav output, for example if you want to chain process.
+    Returns
+    -------
+    data_norm: Normalized data array in bits
+    """
+    n, data, data_dB,sr,ch=inputwav(filename)
+    if ch==1:
+        diff=0-max(data_dB)
+    if ch==2:
+        d1=0-max(data_dB[:,0])
+        d2=0-max(data_dB[:,1])
+        diff=max(d1,d2)
+    print('Adding '+str(diff)+' dB...')
+    data_dB_norm=data_dB+diff
+    data_norm=10.0**((data_dB_norm)/20.0)
+    #sign the bits appropriately:
+    for k in range (ch):
+        for i in range (n):
+            if data[i,k]<0.0:
+                data_norm[i,k]=-1.0*data_norm[i,k]
+    if wout==True:
+        print('Exporting...')
+        sf.write(filename[0:len(filename)-4]+'_normalized.wav',data_norm,sr,'PCM_16')
+    print('Done!')
+    return data_norm
+
+def FFT_brickwallHPF(filename,cutoff,wout=True,plot=True):
+    """
+    Deletes frequencies below cutoff using brickwall. Beware of phase issues.
+    Parameters
+    ----------
+    filename: string
+        Name of the input <audio> file. Uses the soundfile python library
+        to decode the input.
+      
+    cutoff: int (Hz)
+        Frequency of the filter cutoff below which data is filtered out.
+  
+    wout: True/False, optional, default=True
+        Writes the data to a 16 bit *.wav file. Equating to false will suppress
+        *.wav output, for example if you want to chain process.
+      
+    plot: True/False, optional, default=True
+        Produces plot of raw wave form and processed waveform.
+    Returns
+    -------
+    data_filtered: array containing filtered audio in bits
+    """
+    n, data, data_dB,sr,ch=inputwav(filename)
+    print('Applying FFT...')
+    yfreq=rfft(data,axis=0)
+    xfreq=np.linspace(0,sr/(2.0),n)
+    yfreqBHPF=np.zeros((n,ch))
+    yfreqBHPF[0:n,:]=yfreq
+    print('Applying brickwall at '+str(cutoff)+' Hz...')
+    yfreqBHPF[0:np.searchsorted(xfreq,cutoff),:]=0.0
+    data_filtered=(irfft(yfreqBHPF,axis=0))
+    if wout==True:
+        print('Exporting...')
+        sf.write(filename[0:len(filename)-4]+'_brickwallHPF.wav',data_filtered,sr,'PCM_16')
+    if plot==True:
+        print('Plotting...')
+        py.close()
+        fig, (ax1, ax2) = py.subplots(nrows=2)
+        ax1.semilogx(xfreq,20*np.log10(abs(yfreq[0:n,0]+.0001)),'k-',lw=0.5)
+        ax1.semilogx(xfreq,20*np.log10(abs(yfreqBHPF[0:n//1,0]+.0001)),'m-',lw=0.1)
+        ax1.set_xlabel('Frequency (Hz)')
+        ax1.set_ylabel('Amplitude')
+        ax2.plot(data,'k-',label='Raw')
+        ax2.plot(data_filtered,'m-',label='Filtered')
+        ax2.set_xlim(0,10000)
+        ax2.set_ylim(-1,1)
+        ax2.set_ylabel('Amplitude (Norm Bits)')
+        ax2.set_xlabel('Samples')
+        ax2.legend(loc=2)
+    print('Done!')
+    return data_filtered
+
+def FFT_brickwallBR(filename,start,stop,wout=True,plot=True):
+    """
+    Deletes frequencies below cutoff using brickwall. Beware of phase issues.
+    Parameters
+    ----------
+    filename: string
+        Name of the input <audio> file. Uses the soundfile python library
+        to decode the input.
+      
+    cutoff: int (Hz)
+        Frequency of the filter cutoff below which data is filtered out.
+  
+    wout: True/False, optional, default=True
+        Writes the data to a 16 bit *.wav file. Equating to false will suppress
+        *.wav output, for example if you want to chain process.
+      
+    plot: True/False, optional, default=True
+        Produces plot of raw wave form and processed waveform.
+    Returns
+    -------
+    data_filtered: array containing filtered audio in bits
+    """
+    n, data, data_dB,sr,ch=inputwav(filename)
+    print('Applying FFT...')
+    yfreq=fft(data,axis=0)
+    xfreq=np.linspace(0,sr/(2.0),n//2)
+    yfreqBHPF=np.zeros((n,ch),dtype=complex)
+    yfreqBHPF[0:n,:]=yfreq
+    print('Applying brickwall centered at '+str((start+stop)/2)+' Hz...')
+    yfreqBHPF[np.searchsorted(xfreq,start):np.searchsorted(xfreq,stop),:]=0.00001
+    data_filtered=(ifft(yfreqBHPF,axis=0))
+    if wout==True:
+        print('Exporting...')
+        sf.write(filename[0:len(filename)-4]+'_brickwallHPF.wav',data_filtered.real,sr,'PCM_16')
+    if plot==True:
+        print('Plotting...')
+        py.close()
+        fig, (ax1, ax2) = py.subplots(nrows=2)
+        ax1.semilogx(xfreq,20*np.log10(abs(yfreq[0:n//2])),'k-',lw=0.5)
+        ax1.semilogx(xfreq,20*np.log10(abs(yfreqBHPF[0:n//2,0])),'m-',lw=0.1)
+        ax1.set_xlabel('Frequency (Hz)')
+        ax1.set_ylabel('Amplitude (dB)')
+        ax2.plot(data,'k-')
+        ax2.plot(data_filtered,'m-')
+        ax2.set_xlim(0,1000)
+      # ax2.set_ylim(-1,1)
+        ax2.set_ylabel('Amplitude (Norm Bits)')
+        ax2.set_xlabel('Samples')
+        ax2.legend(loc=2)
+    print('Done!')
+    return data_filtered
+
+def FFT_brickwallLPF(filename,cutoff,wout=True,plot=True):
+    """
+    Deletes frequencies above cutoff using brickwall.
+    Parameters
+    ----------
+    filename: string
+        Name of the input <audio> file. Uses the soundfile python library
+        to decode the input.
+      
+    cutoff: int (Hz)
+        Frequency of the filter cutoff above which data is filtered out.
+  
+    wout: True/False, optional, default=True
+        Writes the data to a 16 bit *.wav file. Equating to false will suppress
+        *.wav output, for example if you want to chain process.
+      
+    plot: True/False, optional, default=True
+        Produces plot of raw wave form and processed waveform.
+    Returns
+    -------
+    n: length of song in samples
+  
+    data: array containing the signal in bits.
+  
+    data_dB: array containing the signal in dB.
+  
+    sr: sample rate
+  
+    ch: number of audio channels. 1 = mono, 2 = stereo
+    """
+    start=time.time()
+    n, data, data_dB,sr,ch=inputwav(filename)
+    print('Applying FFT...')
+    W=np.zeros((n,2))
+    W[:,0]=1#blackman(n)
+    W[:,1]=1#blackman(n)
+    yfreq=rfft(data*W,axis=0)
+    xfreq=np.linspace(0,sr/(2.0),n//1)
+    yfreqBLPF=np.zeros((n,ch))
+    yfreqBLPF[0:n,:]=yfreq
+    print('Applying brickwall at '+str(cutoff)+' Hz...')
+    yfreqBLPF[n:np.searchsorted(xfreq,cutoff):-1,:]=0.0
+    data_filtered=(irfft(yfreqBLPF,axis=0))
+    if wout==True:
+        print('Exporting...')
+        sf.write(filename[0:len(filename)-4]+'_brickwallLPF.wav',data_filtered,sr,'PCM_16')
+    if plot==True:
+        print('Plotting...')
+        py.close()
+        fig, (ax1, ax2) = py.subplots(nrows=2)
+        ax1.semilogx(xfreq,20*np.log10(abs(yfreq[0:n//1,:]+.0001)),'k-',lw=0.5)
+        ax1.semilogx(xfreq,20*np.log10(abs(yfreqBLPF[0:n//1,:]+.0001)),'m-',lw=0.1)
+        ax1.set_xlabel('Frequency (Hz)')
+        ax1.set_ylabel('Amplitude (dB)')
+        ax2.plot(data,'k-',label='Raw')
+        ax2.plot(data_filtered,'m-',lw=1,label='Filtered')
+        ax2.set_xlim(0,10000)
+        ax2.set_ylim(-1,1)
+        ax2.set_ylabel('Amplitude (Norm Bits)')
+        ax2.set_xlabel('Samples')
+        ax2.legend(loc=2,frameon=False,ncol=2)
+    print('Done!')
+    end=time.time()
+    elapsed=(end-start)
+    print('Completed in '+str(elapsed)+' seconds.')
+    return data_filtered
+
+
+def LPF(filename,cutoff,Q=1,wout=True,plot=True):
+    """
+    Lowpass filter.
+    Parameters
+    ----------
+    filename: string
+        Name of the input <audio> file. Uses the soundfile python library
+        to decode the input.
+      
+    cutoff: int (Hz)
+        Frequency of the filter cutoff above which data is filtered out.
+      
+    Q:  int, optional, default=1
+        Number of poles in filter or steepness of filter edge.
+  
+    wout: True/False, optional, default=True
+        Writes the data to a 16 bit *.wav file. Equating to false will suppress
+        *.wav output, for example if you want to chain process.
+      
+    plot: True/False, optional, default=True
+        Produces plot of raw wave form and processed waveform.
+    Returns
+    -------
+    n: length of song in samples
+  
+    data: array containing the signal in bits.
+  
+    data_dB: array containing the signal in dB.
+  
+    sr: sample rate
+  
+    ch: number of audio channels. 1 = mono, 2 = stereo
+    """
+    start=time.time()
+    n, data, data_dB,sr,ch=inputwav(filename)
+    b, a = butter(Q,cutoff/sr,btype='low')
+    data_filtered=lfilter(b,a,data,axis=0)
+    print('Applying FFT...')
+    if wout==True:
+        print('Exporting...')
+        sf.write(filename[0:len(filename)-4]+'_LPF.wav',data_filtered,sr,'PCM_16')
+    if plot==True:
+        print('Plotting...')
+        py.close()
+        w, h = freqz(b,a,worN=1024)
+        fig, (ax1, ax2) = py.subplots(nrows=2)
+        ax1.semilogx(0.5*sr*w/np.pi,abs(h),'k--')
+        ax1.set_xlabel('Frequency (Hz)')
+        ax1.set_ylabel('Rel. Amplitude')
+        ax1.grid()
+        ax1.set_ylim(0,1.1)
+        ax1.set_xlim(1,20000)
+        ax2.plot(data,'k-',label='Raw data')
+        ax2.plot(data_filtered,'m-',lw=1,label='Filtered data')
+        ax2.set_xlim(0,10000)
+        ax2.set_ylim(-1,1)
+        ax2.set_ylabel('Amplitude (Norm Bits)')
+        ax2.set_xlabel('Samples')
+        ax2.legend(loc=2,frameon=False,ncol=2)
+        py.subplots_adjust(hspace=0.35)    
+    print('Done!')
+    end=time.time()
+    elapsed=int(1000*(end-start))
+    print('...............................')
+    print('Completed in '+str(elapsed)+' milliseconds.')
+    return data_filtered
+
+def HPF(filename,cutoff,Q=1,wout=True,plot=True):
+    """
+    Deletes frequencies above cutoff using brickwall.
+    Parameters
+    ----------
+    filename: string
+        Name of the input <audio> file. Uses the soundfile python library
+        to decode the input.
+      
+    cutoff: int (Hz)
+        Frequency of the filter cutoff above which data is filtered out.
+  
+    wout: True/False, optional, default=True
+        Writes the data to a 16 bit *.wav file. Equating to false will suppress
+        *.wav output, for example if you want to chain process.
+      
+    plot: True/False, optional, default=True
+        Produces plot of raw wave form and processed waveform.
+    Returns
+    -------
+    n: length of song in samples
+  
+    data: array containing the signal in bits.
+  
+    data_dB: array containing the signal in dB.
+  
+    sr: sample rate
+  
+    ch: number of audio channels. 1 = mono, 2 = stereo
+    """
+    start=time.time()
+    n, data, data_dB,sr,ch=inputwav(filename)
+    b, a = butter(Q,cutoff/sr,btype='high')
+    data_filtered=lfilter(b,a,data,axis=0)
+    print('Applying FFT...')
+    if wout==True:
+        print('Exporting...')
+        sf.write(filename[0:len(filename)-4]+'_HPF.wav',data_filtered,sr,'PCM_16')
+    if plot==True:
+        print('Plotting...')
+        py.close()
+        w, h = freqz(b,a,worN=16384)
+        fig, (ax1, ax2) = py.subplots(nrows=2)
+        ax1.semilogx(0.5*sr*w/np.pi,abs(h),'k--')
+        ax1.set_title('Fiter Frequency Response')
+        ax1.set_xlabel('Frequency (Hz)')
+        ax1.set_ylabel('Rel. Amplitude')
+        ax1.grid()
+        ax1.set_ylim(0,1.1)
+        ax1.set_xlim(1,20000)
+        ax2.plot(data,'k-',label='Raw data')
+        ax2.plot(data_filtered,'m-',lw=1,label='Filtered data')
+        ax2.set_xlim(0,10000)
+        ax2.set_ylim(-1,1)
+        ax2.set_ylabel('Amplitude (Norm Bits)')
+        ax2.set_xlabel('Samples')
+        ax2.legend(loc=2,frameon=False,ncol=2)
+        py.subplots_adjust(hspace=0.35)    
+    print('Done!')
+    end=time.time()
+    elapsed=int(1000*(end-start))
+    print('...............................')
+    print('Completed in '+str(elapsed)+' milliseconds.')
+    return data_filtered
+
+def bandpass(filename,f1,f2,Q,wout=True,plot=True):
+    """
+    Filters frequency content outside of [f1,f2] domain.
+    Parameters
+    ----------
+    filename: string
+        Name of the input <audio> file. Uses the soundfile python library
+        to decode the input.
+      
+    f1: int (Hz)
+        Start frequency of the filter cutoff above which data is filtered out.
+      
+    f2: int (Hz)
+        Stop frequency of the filter cutoff below which data is filtered out.
+      
+    Q:  int, optional, default=1
+        Number of poles in filter or steepness of filter edge.
+      
+    wout: True/False, optional, default=True
+        Writes the data to a 16 bit *.wav file. Equating to false will suppress
+        *.wav output, for example if you want to chain process.
+      
+    plot: True/False, optional, default=True
+        Produces plot of raw wave form and processed waveform.
+    Returns
+    -------
+    n: length of song in samples
+  
+    data: array containing the signal in bits.
+  
+    data_dB: array containing the signal in dB.
+  
+    sr: sample rate
+  
+    ch: number of audio channels. 1 = mono, 2 = stereo
+    """
+    start=time.time()
+    n, data, data_dB,sr,ch=inputwav(filename)
+    b, a = butter(Q,Wn=(f1/sr,f2/sr),btype='bandpass')
+    data_filtered=lfilter(b,a,data,axis=0)
+    print('Applying FFT...')
+    if wout==True:
+        print('Exporting...')
+        sf.write(filename[0:len(filename)-4]+'_BP.wav',data_filtered,sr,'PCM_16')
+    if plot==True:
+        print('Plotting...')
+        py.close()
+        w, h = freqz(b,a,worN=16384)
+        fig, (ax1, ax2) = py.subplots(nrows=2)
+        ax1.semilogx(0.5*sr*w/np.pi,abs(h),'k-')
+        ax1.set_xlabel('Frequency (Hz)')
+        ax1.set_ylabel('Rel. Amplitude')
+        ax1.grid()
+        ax1.set_ylim(0,1.1)
+        ax1.set_xlim(1,20000)
+        ax2.plot(data,'k-',label='Raw data')
+        ax2.plot(data_filtered,'m-',lw=1,label='Filtered data')
+        ax2.set_xlim(0,10000)
+        ax2.set_ylim(-1,1)
+        ax2.set_ylabel('Amplitude (Norm Bits)')
+        ax2.set_xlabel('Samples')
+        ax2.legend(loc=2,frameon=False,ncol=2)
+        py.subplots_adjust(hspace=0.35)    
+    print('Done!')
+    end=time.time()
+    elapsed=int(1000*(end-start))
+    print('...............................')
+    print('Completed in '+str(elapsed)+' milliseconds.')
+    return data_filtered
+
+def slow(filename,p=10,wout=True):
+    """
+    Resamples the input by p%, slowing it down by p%. Uses the scipy resample
+    function.
+  
+    Parameters
+    ----------
+    filename: string
+        Name of the input <audio> file. Uses the soundfile python library
+        to decode the input.
+  
+    p: float/int, optional, default=10
+        percentage the audio is slowed by.
+  
+    wout: True/False, optional, default=True
+        Writes the data to a 16 bit *.wav file. Equating to false will suppress
+        *.wav output, for example if you want to chain process.
+    Returns
+    -------
+    f: resampled data in bits
+    """
+    n, data, data_dB,sr,ch=inputwav(filename)
+    if p>0:
+        print('Slowing...')
+    if p<0:
+        print('Warning: You are speeding up the audio! Use positive value'
+              +' for p to slow.')
+    f=resample(data,int(len(data)*(1+p/100.0)))
+    if wout==True:
+        print('Exporting...')
+        sf.write(filename[0:len(filename)-4]+'_slow.wav',f,sr,'PCM_16')
+        print('Done!')
+    return f
+
+  
+
+def conv_reverb(filename,ir="vocalduo.wav",wet=0.5,wout=True):  
+    start=time.time()
+    n, data, data_dB,sr,ch=inputwav(filename)
+    n_IR, data_IR, data_dB_IR,sr_IR,ch_IR=inputwav(ir)
+    print('Convolving impulse response with track...')
+    convolution = convolve(n,n_IR,mode='full')
+    for i in range(ch+1): #normalize the song
+      convolution[:,i]=convolution[:,i]/max(convolution[:,i])
+    song_pad = np.zeros(convolution[:,0:2].shape)
+    for i in range(ch):
+      song_pad[0:len(song)]=song
+    print('Mixing...')
+    final = wet*song_pad+(1-wet)*convolution[:,0:2]
+    if wout==True:
+        print('Exporting...')
+        sf.write(filename[0:len(filename)-4]+'_verbed.wav',data_verb,sr,'PCM_16')
+    print('Done!')
+    end=time.time()
+    elapsed=int(1000*(end-start))
+    print('...............................')
+    print('Completed in '+str(elapsed)+' milliseconds.')
+    return data_verb
+
+
+
+def verb_delay(filename,l,t,d,wout=True): #l = predelay   d= decay smaller = less decay, t= number of delays
+#low l turns into chorus
+    """
+    Repeats sound to form delay or reverb with appropriate parameters.
+  
+    Parameters
+    ----------
+    filename: string
+        Name of the input <audio> file. Uses the soundfile python library
+        to decode the input.
+  
+    l:  int
+        Spacing between samples in units of sample. Serves as "predelay"
+        or the delay spacing.
+          
+    t:  int
+        Number of delays or repetitions produced.
+      
+    d:  float
+        Characteristic decay time of the feedback.
+  
+    wout: True/False, optional, default=True
+        Writes the data to a 16 bit *.wav file. Equating to false will suppress
+        *.wav output, for example if you want to chain process.
+    Returns
+    -------
+    data_verb: Data with reverb added in bit units.
+    """
+    start=time.time()
+    n, data, data_dB,sr,ch=inputwav(filename)
+    data_ex=np.zeros(((n+l*t),ch))
+    data_ex[0:n,:]=data
+    data_Rex=np.zeros((len(data_ex),t,ch))
+    print('Applying reverb...')
+    for k in range (ch):
+        for i in range (len(data)):
+            for j in range(t):
+                data_Rex[i+l*(j+1),j,k]=data_ex[i,k]*np.exp(-d*(j+1))
+    data_F=data_ex
+    print('Mixing...')
+    for i in range (t):
+        data_F=data_F+1*data_Rex[:,i,:]
+    data_F=1*data_F
+    data_verb=data_F+data_ex
+    if wout==True:
+        print('Exporting...')
+        sf.write(filename[0:len(filename)-4]+'_verbed.wav',data_verb,sr,'PCM_16')
+    print('Done!')
+    end=time.time()
+    elapsed=int(1000*(end-start))
+    print('...............................')
+    print('Completed in '+str(elapsed)+' milliseconds.')
+    return data_verb
+
+
+
+def compress(filename,threshold,ratio,makeup,attack,release,wout=True,plot=False):
+    """
+    Reduces dynamic range of input signal by reducing volume above threshold.
+    The gain reduction is smoothened according to the attack and release.
+    Makeup gain must be added manually.
+    Parameters
+    ----------
+    filename: string
+        Name of the input *.wav file.
+    threshold: scalar (dB)
+        value in dB of the threshold at which the compressor engages in
+        gain reduction.
+    ratio: scalar
+        The ratio at which volume is reduced for every dB above the threshold
+        (i.e. r:1)
+        For compression to occur, ratio should be above 1.0. Below 1.0, you
+        are expanding the signal.
+      
+    makeup: scalar (dB)
+        Amount of makeup gain to apply to the compressed signal
+  
+    attack: scalar (ms)
+        Characteristic time required for compressor to apply full gain
+        reduction. Longer times allow transients to pass through while short
+        times reduce all of the signal. Distortion will occur if the attack
+        time is too short.
+  
+    release: scalar (ms)
+        Characteristic time that the compressor will hold the gain reduction
+        before easing off. Both attack and release basically smoothen the gain
+        reduction curves.
+      
+    wout: True/False, optional, default=True
+        Writes the data to a 16 bit *.wav file. Equating to false will suppress
+        *.wav output, for example if you want to chain process.
+      
+    plot: True/False, optional, default=True
+        Produces plot of waveform and gain reduction curves.
+  
+      
+    Returns
+    -------
+    data_Cs: array containing the compressed waveform in dB
+    data_Cs_bit: array containing the compressed waveform in bits.
+    """
+    start=time.time()
+    if ratio < 1.0:
+        print('Ratio must be > 1.0 for compression to occur! You are expanding.')
+    if ratio==1.0:
+        print('Signal is unaffected.')
+    n, data, data_dB,sr,ch=inputwav(filename)
+    #Array for the compressed data in dB
+    dataC=data_dB.copy()
+    #attack and release time constant
+    a=np.exp(-np.log10(9)/(44100*attack*1.0E-3))
+    re=np.exp(-np.log10(9)/(44100*release*1.0E-3))
+    #apply compression
+    print('Compressing...')
+    for k in range(ch):
+        for i in range (n):
+            if dataC[i,k]>threshold:
+                dataC[i,k]=threshold+(dataC[i,k]-threshold)/(ratio)
+    #gain and smooth gain initialization
+    gain=np.zeros(n)
+    sgain=np.zeros(n)
+    #calculate gain
+    gain=np.subtract(dataC,data_dB)
+    sgain=gain.copy()
+    #smoothen gain
+    print('Smoothing...')
+    for k in range(ch):
+        for i in range (1,n):
+            if sgain[i-1,k]>=sgain[i,k]:
+                sgain[i,k]=a*sgain[i-1,k]+(1-a)*sgain[i,k]
+            if sgain[i-1,k]<sgain[i,k]:
+                sgain[i,k]=re*sgain[i-1,k]+(1-re)*sgain[i,k]    
+    #Array for the smooth compressed data with makeup gain applied
+    dataCs=np.zeros(n)
+    dataCs=data_dB+sgain+makeup
+    #Convert our dB data back to bits
+    dataCs_bit=10.0**((dataCs)/20.0)
+    #sign the bits appropriately:
+    for k in range (ch):
+        for i in range (n):
+            if data[i,k]<0.0:
+                dataCs_bit[i,k]=-1.0*dataCs_bit[i,k]
+    #Plot the data:
+    if plot==True:
+        print('Plotting...')
+        t=np.linspace(0,n/(1.0*sr),n)
+        py.close()
+        fig, (ax1, ax2) = py.subplots(nrows=2)  
+        ax2.plot(t,gain,'k-',linewidth=0.1,label='Gain Reduction')
+        ax2.plot(t,sgain,'r-',linewidth=1, label='Gain Reduction Smooth')
+        ax1.plot(t,data,'k-',linewidth=1,label=filename)
+        ax1.plot(t,dataCs_bit,'m-',linewidth=0.1,
+                label=filename+' compressed')
+        ax1.axhline(10**(threshold/20.0),linestyle='-',
+                    color='cyan',linewidth=1)
+        ax1.axhline(-10**(threshold/20.0),linestyle='-',
+                    color='cyan',linewidth=1)
+        ax1.legend()
+        ax2.legend()
+        ax2.set_xlabel('Time (s)')
+        ax2.set_ylabel('Gain Reduction (dB)')
+        ax1.set_ylabel('Amplitude (Rel. Bit)')
+        ax1.set_xlabel('Time (s)')
+    #write data to 16 bit file
+    if wout==True:
+        print('Exporting...')
+        sf.write(filename[0:len(filename)-4]+'_compressed.wav',dataCs_bit,
+                sr,'PCM_16')
+    end=time.time()
+    elapsed=int(1000*(end-start))
+    print('Done!')
+    print('...............................')
+    print('Completed in '+str(elapsed)+' milliseconds.')    
+    return dataCs,dataCs_bit
+
+def gate(filename,threshold,ratio,attack,release,wout=True,plot=True):
+    """
+    Reduces dynamic range of input signal by reducing volume above threshold.
+    The gain reduction is smoothened according to the attack and release.
+    Makeup gain must be added manually.
+    Parameters
+    ----------
+    filename : string
+        Name of the input *.wav file.
+    threshold : scalar (dB)
+        value in dB of the threshold at which the compressor engages in
+        gain reduction.
+    ratio : scalar
+        The ratio at which volume is reduced for every dB above the threshold
+        (i.e. r:1)
+        For compression to occur, ratio should be above 1.0. Below 1.0, you
+        are expanding the signal.
+      
+    makeup: scalar (dB)
+        Amount of makeup gain to apply to the compressed signal
+  
+    attack: scalar (ms)
+        Characteristic time required for compressor to apply full gain
+        reduction. Longer times allow transients to pass through while short
+        times reduce all of the signal. Distortion will occur if the attack
+        time is too short.
+  
+    release: scalar (ms)
+        Characteristic time that the compressor will hold the gain reduction
+        before easing off. Both attack and release basically smoothen the gain
+        reduction curves.
+      
+    wout: True/False, optional, default=True
+        Writes the data to a 16 bit *.wav file. Equating to false will suppress
+        *.wav output, for example if you want to chain process.
+      
+    plot: True/False, optional, default=True
+        Produces plot of waveform and gain reduction curves.
+  
+      
+    Returns
+    -------
+    data_Cs: array containing the compressed waveform in dB
+    data_Cs_bit: array containing the compressed waveform in bits.
+    """
+    start=time.time()
+    if ratio < 1.0:
+        print('Ratio must be > 1.0 for compression to occur! You are expanding.')
+    if ratio==1.0:
+        print('Signal is unaffected.')
+    n, data, data_dB,sr,ch=inputwav(filename)
+    #Array for the compressed data in dB
+    dataC=data_dB.copy()
+    #attack and release time constant
+    a=np.exp(-np.log10(9)/(44100*attack*1.0E-3))
+    re=np.exp(-np.log10(9)/(44100*release*1.0E-3))
+    #apply compression
+    print('Compressing...')
+    for k in range (ch):
+        for i in range (n):
+            if dataC[i,k]<threshold:
+                dataC[i,k]=-100
+    #Array for the smooth compressed data with makeup gain applied
+    #Convert our dB data back to bits
+    dataCs_bit=10.0**((dataC)/20.0)
+    #sign the bits appropriately:
+    for k in range (ch):
+        for i in range (len(data)):
+            if data[i,k]<0.0:
+                dataCs_bit[i,k]=-1.0*dataCs_bit[i,k]
+    #Plot the data:
+    if plot==True:
+        print('Plotting...')
+        t=np.linspace(0,n/(1.0*sr),n)
+        py.close()
+        fig, (ax1, ax2) = py.subplots(nrows=2)  
+        #ax2.plot(t,gain,'k-',linewidth=0.1,label='Gain Reduction')
+        #ax2.plot(t,sgain,'r-',linewidth=1, label='Gain Reduction Smooth')
+        ax1.plot(t,data,'k-',linewidth=1,label=filename)
+        ax1.plot(t,dataCs_bit,'m-',linewidth=0.1,
+                label=filename+' compressed')
+        ax1.axhline(10**(threshold/20.0),linestyle='-',
+                    color='cyan',linewidth=1)
+        ax1.axhline(-10**(threshold/20.0),linestyle='-',
+                    color='cyan',linewidth=1)
+        ax1.legend()
+        ax2.legend()
+        ax2.set_xlabel('Time (s)')
+        ax2.set_ylabel('Gain Reduction (dB)')
+        ax1.set_ylabel('Amplitude (Rel. Bit)')
+        ax1.set_xlabel('Time (s)')
+    #write data to 16 bit file
+    if wout==True:
+        print('Exporting...')
+        sf.write(filename[0:len(filename)-4]+'_gated.wav',dataCs_bit,
+                sr,'PCM_16')
+    end=time.time()
+    elapsed=int(1000*(end-start))
+    print('Done!')
+    print('...............................')
+    print('Completed in '+str(elapsed)+' milliseconds.')    
+    return dataC,dataCs_bit
+
+def limit(filename,threshold,makeup,wout=True,plot=False):
+    """
+    Limits the data above the threshold. Compression with high ratio and long
+    release with fairly quick attack.
+    Parameters
+    ----------
+    filename : string
+        Name of the input *.wav file.
+    threshold : scalar (dB)
+        value in dB of the threshold above which signal is limited
+      
+    makeup: scalar (dB)
+        Amount of makeup gain to apply to the compressed signal
+  
+    attack: scalar (ms)
+        Characteristic time required for compressor to apply full gain
+        reduction. Longer times allow transients to pass through while short
+        times reduce all of the signal. Distortion will occur if the attack
+        time is too short.
+  
+    release: scalar (ms)
+        Characteristic time that the compressor will hold the gain reduction
+        before easing off. Both attack and release basically smoothen the gain
+        reduction curves.
+      
+    wout: True/False, optional, default=True
+        Writes the data to a 16 bit *.wav file. Equating to false will suppress
+        *.wav output, for example if you want to chain process without creating
+        too many files.
+      
+    plot: True/False, optional, default =True
+        Produces plot of waveform and gain reduction curves.
+  
+      
+    Returns
+    -------
+    dataL: array containing the limited waveform in dB
+  
+    dataL_bit: array containing the limited waveform in bits.
+    """
+    start=time.time()
+    n, data, data_dB,sr,ch=inputwav(filename)
+    dataL,dataL_bit=compress(filename,threshold,1000.0,makeup,1.0,500.0,wout=False,plot=plot)
+    if wout==True:
+        print('Exporting...')
+        sf.write(filename[0:len(filename)-4]+'_limit.wav',dataL_bit,44100,'PCM_16')
+    end=time.time()
+    elapsed=int(1000*(end-start))
+    print('Done!')
+    print('...............................')
+    print('Completed in '+str(elapsed)+' milliseconds.')    
+    return dataL,dataL_bit
+
+def distort(filename,threshold=0.25,type='arctan',wout=True,plot=False):
+    """
+    Applies distortion to signal. Reshapes the signal above user input
+    threshold (in bits).
+    Parameters
+    ----------
+    filename : string
+        Name of the input *.wav file.
+    threshold : scalar 
+        lower = more distortion, try 0.25 for heavy distortion.
+      
+    type: string, optional, default=cubic
+        Type of distortion that is applied. Default is arctan. more will be added
+          soon.
+      
+    wout: True/False, optional, default=True
+        Writes the data to a 16 bit *.wav file. Equating to false will suppress
+        *.wav output, for example if you want to chain process without creating
+        too many files.
+      
+    plot: True/False, optional, default =True
+        Produces plot of input and output waveforms.
+  
+    Returns
+    -------
+    dataD: array containing the limited waveform in bits
+    """
+    start=time.time()
+    n, data, data_dB,sr,ch=inputwav(filename)
+    dataD=np.zeros((len(data),ch))
+    dataD[:len(data),:]=data#data_dB
+    if type=='arctan':
+        print('Applying arctan distortion...')
+        for k in range(ch):
+            for i in range (0,len(data)):
+                dataD[i,k]=(2/np.pi)*np.arctan((np.pi / threshold)*dataD[i,k])
+    if wout==True:
+        print('Exporting...')
+        sf.write(filename[0:len(filename)-4]+'_distort.wav',dataD,sr,'PCM_16')
+    #PLOTTING#
+    if plot==True:
+        print('Plotting...')
+        t=np.linspace(0,n/(1.0*sr),n)
+        py.close()
+        fig, (ax1) = py.subplots(nrows=1)  
+        ax1.plot(t,data,'k-',linewidth=1,label=filename)
+        ax1.plot(t,dataD,'m-',linewidth=0.5,
+                label=filename+' distorted')
+        ax1.axhline(threshold,linestyle='-',
+                    color='cyan',linewidth=1)
+        ax1.axhline(-threshold,linestyle='-',
+                    color='cyan',linewidth=1)
+        ax1.legend(loc=1)
+        ax1.set_ylabel('Amplitude (Rel. Bit)')
+        ax1.set_xlabel('Time (s)')
+    end=time.time()
+    elapsed=int(1000*(end-start))
+    print('Done!')
+    print('...............................')
+    print('Completed in '+str(elapsed)+' milliseconds.')        
+    return dataD
+
+def stereo(filename,time,wout=True):
+    """
+    Produces stereo effect. If file is mono, two channels are created and the
+    R channel is delayed to simulate stereo width. Beware of phase issues.
+    Parameters
+    ----------
+    filename : string
+        Name of the input *.wav file.
+    time : scalar (ms)
+        Amount of time the right channel is delayed by, in milliseconds.
+      
+    wout: True/False, optional, default=True
+        Writes the data to a 16 bit *.wav file. Equating to false will suppress
+        *.wav output, for example if you want to chain process without creating
+        too many files.
+      
+    Returns
+    -------
+    data_st: array containing the stereo waveform in normalized bits.
+    """
+    n, data, data_dB,sr,ch=inputwav(filename)
+    s_shift=int(sr*time*1E-3)
+    R=np.zeros(n)
+    L=np.zeros(n)
+    if  ch==2:
+        L[:]=data[:,0]
+        R[:]=data[:,1]
+    if ch==1:
+        L[:]=data[:,0]
+        R[:]=data[:,0]
+    print('Applying stereo width...')
+    for i in range (n-s_shift):
+        R[i]=R[i+s_shift]
+    data_st=np.zeros((n,2))
+    data_st[:,0]=L[:]
+    data_st[:,1]=R[:]
+    if wout==True:
+        print('Exporting...')
+        sf.write(filename[0:len(filename)-4]+'_stereo.wav',data_st,44100,'PCM_16')
+    print ('Done!')
+    return data_st
+
+def chorus(filename,s=False,wout=True):
+    """
+    Produces chorus effect on input
+    Parameters
+    ----------
+    filename : string
+        Name of the input *.wav file.
+    wout: True/False, optional, default=True
+        Writes the data to a 16 bit *.wav file. Equating to false will suppress
+        *.wav output, for example if you want to chain process without creating
+        too many files.
+      
+    Returns
+    -------
+    data_m: array containing the stereo waveform in normalized bits.
+    """
+    n, data, data_dB,sr,ch=inputwav(filename)
+    data_1=slow(filename,p=0.1,wout=False)
+    data_2=slow(filename,p=-0.1,wout=False)
+    data_2pd=np.zeros((len(data_1),ch))
+    data_2pd[0:len(data_2),:]=data_2
+    data_pd=np.zeros((len(data_1),ch))
+    data_pd[0:len(data),:]=data
+    if s==True:
+        print('Adding stereo chorus...')
+        sf.write('./chorusw.wav',data_1+data_2pd,44100,'PCM_24')
+        st=stereo('chorusw.wav',2,wout=False)
+        data_F=data_pd+0.3*st
+    else:
+        print('Adding mono chorus...')
+        data_F=data_pd+0.81*data_1+0.8*data_2pd
+    if wout==True:
+        print('Exporting...')
+        sf.write('./chorus.wav',data_F,44100,'PCM_24')
+    os.remove('chorusw.wav')
+    print('Done!')
+    return data_F
+
+def view(filename):
+    """
+    Plots waveform of input audio file. Note that every 100th data point is
+    plotted for faster performance
+    Parameters
+    ----------
+    filename : string
+        Name of the input *.wav file.
+    """
+    n, data, data_dB,sr,ch=inputwav(filename)
+    t=np.linspace(0,n/sr,n)
+    py.close()
+    fig, (ax1) = py.subplots(nrows=1)  
+    ax1.plot(t[0:n:100],data[0:n:100],'k-',linewidth=1,label=filename)
+    ax1.legend(loc=1)
+    ax1.set_ylabel('Amplitude (Rel. Bit)')
+    ax1.set_xlabel('Time (s)')
+    
+
+def mono(filename,wout=True):
+    """
+    Converts a stereo track to mono.
+    Parameters
+    ----------
+    filename : string
+        Name of the input *.wav file.
+    wout: True/False, optional, default=True
+        Writes the data to a 16 bit *.wav file. Equating to false will suppress
+        *.wav output, for example if you want to chain process without creating
+        too many files.
+      
+    Returns
+    -------
+    data_m: array containing the stereo waveform in normalized bits.
+    """
+    n, data, data_dB,sr,ch=inputwav(filename)
+    if  ch==2:
+        print('Converting to mono...')
+        L=data[:,0]
+        R=data[:,1]
+        n=len(data)
+        data_m=np.zeros((n,1))
+        data_m=L/2.0+R/2.0
+        if wout==True:
+            print('Exporting...')
+            sf.write(filename[0:len(filename)-4]+'_mono.wav',data_m,sr,'PCM_16')
+        print('Done!')
+        return data_m
+    else:
+        print( "Error: input is already mono stoooooooooopid!")
+        
+        
+def snip(filename,s,e,wout=True):
+    """
+    Converts a stereo track to mono.
+    Parameters
+    ----------
+    filename : string
+        Name of the input *.wav file.
+    wout: True/False, optional, default=True
+        Writes the data to a 16 bit *.wav file. Equating to false will suppress
+        *.wav output, for example if you want to chain process without creating
+        too many files.
+      
+    Returns
+    -------
+    data_m: array containing the stereo waveform in normalized bits.
+    """
+    n, data, data_dB,sr,ch=inputwav(filename)
+    st=int(s*44100)
+    en=int(e*44100)
+    data_s=data[st:en,:]
+    if wout==True:
+        print('Exporting...')
+        sf.write(filename[0:len(filename)-4]+'_snipped.wav',data_s,sr,'PCM_16')
+    print('Done!')
+    return data_s
+
+def mix(f1,f2,r):
+    n, data, data_dB,sr,ch=inputwav(f1)
+    n1, data1, data_dB1,sr1,ch1=inputwav(f2)
+    data_sum=r*data+(1-r)*data1
+    sf.write(f1[0:len(f1)-4]+f2,data_sum,sr,'PCM_16')
+
+def drakify(filename):
+    compress(filename,1,1,-20,1,1,wout=True,plot=False)
+    slow(filename[0:len(filename)-4]+'_compressed.wav',wout=True,p=20)
+    conv_reverb(filename[0:len(filename)-4]+'_compressed_slow.wav')
+    os.replace(filename[0:len(filename)-4]+'_compressed_slow_verbed.wav',filename[0:len(filename)-4]+'_drakify.wav')
+    os.remove(filename[0:len(filename)-4]+'_compressed_slow.wav')
+    os.remove(filename[0:len(filename)-4]+'_compressed.wav')
+    normalize(filename[0:len(filename)-4]+'_drakify.wav')
+    os.remove(filename[0:len(filename)-4]+'_drakify.wav')
+    #print(3)
+    
+def drakifyD(filename):
+    slow(filename,wout=True)
+    distort(filename[0:len(filename)-4]+'_slow.wav',0.1,type='flat')
+    conv_reverb(filename[0:len(filename)-4]+'_slow_distort.wav')
+    os.replace(filename[0:len(filename)-4]+'_slow_distort_verbed.wav',filename[0:len(filename)-4]+'_drakifyD.wav')
+    os.remove(filename[0:len(filename)-4]+'_slow.wav')
+    #print(3)    
+    
+def drakifyL(filename):
+    slow(filename,wout=True)
+    limit(filename[0:len(filename)-4]+'_slow.wav',-20,7)
+    conv_reverb(filename[0:len(filename)-4]+'_slow_limit.wav')
+    os.replace(filename[0:len(filename)-4]+'_slow_limit_verbed.wav',filename[0:len(filename)-4]+'_drakifyL.wav')
+    os.remove(filename[0:len(filename)-4]+'_slow.wav')
+    #print(3)       
+  
+def robot(filename,wout=True):
+    verb_delay(filename,1000,10,.000000009)
+    os.replace(filename[0:len(filename)-4]+'_verbed.wav',filename[0:len(filename)-4]+'_robot.wav')
+  
+def choverb(filename,wout=True):
+    verb_delay(filename,100,1,.00000000001)
+    os.replace(filename[0:len(filename)-4]+'_verbed.wav',filename[0:len(filename)-4]+'_choverb.wav')
+  
+def verberator(filename,wout=True):
+    verb_delay(filename,10000,3,.01)
+    os.replace(filename[0:len(filename)-4]+'_verbed.wav',filename[0:len(filename)-4]+'_verberator.wav')
+  
+def robot2(filename,wout=True):
+    verb_delay(filename,500,10,.000001)
+    os.replace(filename[0:len(filename)-4]+'_verbed.wav',filename[0:len(filename)-4]+'_robot2.wav')
+  
+def long(filename,wout=True):
+    verb_delay(filename,5000,20,.1)
+    os.replace(filename[0:len(filename)-4]+'_verbed.wav',filename[0:len(filename)-4]+'_long.wav')
+  
+def telephone(filename,wout=True):
+    bandpass(filename,300,3400,3)
+    os.replace(filename[0:len(filename)-4]+'_BP.wav',filename[0:len(filename)-4]+'_telephone.wav')
+
+def bluetoothspeaker(filename):
+    normalize(filename)
+    LPF(filename[0:len(filename)-4]+'_normalized.wav',400,Q=2)
+    distort(filename[0:len(filename)-4]+'_normalized_LPF.wav',0.41,type='digital')
+    os.replace(filename[0:len(filename)-4]+'_normalized_LPF_distort.wav',filename[0:len(filename)-4]+'_btspeaker.wav')
+    os.remove(filename[0:len(filename)-4]+'_normalized_LPF.wav')
+    os.remove(filename[0:len(filename)-4]+'_normalized.wav')
