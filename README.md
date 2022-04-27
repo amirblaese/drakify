@@ -7,7 +7,7 @@ Getting your favorite song "slowed and reverbed" is as simple as
 
     drakify('songname.wav')
     
- Listen to "backto.wav" and "backto_drakify.wav" for before and after versions showing my Drakify algorithm. (The song is my 2017 remix to Steve James - Renaissance)
+ Listen to "drakify_example.wav" for before and after versions showing my Drakify algorithm. (The song is my 2017 remix to Steve James - Renaissance)
   
 ## Dependencies
 
