@@ -1082,7 +1082,7 @@ def mix(f1,f2,r):
     data_sum=r*data+(1-r)*data1
     sf.write(f1[0:len(f1)-4]+f2,data_sum,sr,'PCM_16')
 
-def drakify(filename,wet=0.2):
+def drakify(filename,wet=0.3):
     #compress(filename,1,1,-20,1,1,wout=True,plot=False)
     slow(filename[0:len(filename)-4]+'.wav',wout=True,p=20)
     conv_reverb(filename[0:len(filename)-4]+'_slow.wav',wet=wet)
