@@ -27,6 +27,7 @@ This library uses a few basic python libraries: numpy, pylab, scipy(fftpack,sign
    - Lowpass, highpass, bandpass IIR filters (Butterworth)
    - FFT brickwall filters
 - Speed up and down
+- Convolution reverb
 - Delay
 - Dynamic range compression 
 - Limiter 
