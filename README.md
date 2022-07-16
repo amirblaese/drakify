@@ -1,5 +1,5 @@
 # 📻 DRAKIFY
-Written by Shayan Gheidi. 
+The world's first slowed and reverb'ed algorithm implemented using basic scipy/numpy functions in Python. Written by Shayan Gheidi. 
 ## About
 An easy-to-use audio effect library featuring high quality effects and unique presets. 
 
