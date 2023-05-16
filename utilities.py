@@ -132,3 +132,38 @@ def mix(f1, f2, r):
     n1, data1, data_dB1, sr1, ch1 = inputwav(f2)
     data_sum = r * data + (1 - r) * data1
     sf.write(f1[0 : len(f1) - 4] + f2, data_sum, sr, "PCM_16")
+
+    
+def mono(filename, wout=True):
+    """
+    Converts a stereo track to mono.
+    Parameters
+    ----------
+    filename : string
+        Name of the input *.wav file.
+    wout: True/False, optional, default=True
+        Writes the data to a 16 bit *.wav file. Equating to false will suppress
+        *.wav output, for example if you want to chain process without creating
+        too many files.
+
+    Returns
+    -------
+    data_m: array containing the stereo waveform in normalized bits.
+    """
+    n, data, data_dB, sr, ch = inputwav(filename)
+    if ch == 2:
+        print("Converting to mono...")
+        L = data[:, 0]
+        R = data[:, 1]
+        n = len(data)
+        data_m = np.zeros((n, 1))
+        data_m = L / 2.0 + R / 2.0
+        if wout == True:
+            print("Exporting...")
+            sf.write(
+                filename[0 : len(filename) - 4] + "_mono.wav", data_m, sr, "PCM_16"
+            )
+        print("Done!")
+        return data_m
+    else:
+        print("Error: input is already mono stoooooooooopid!")
