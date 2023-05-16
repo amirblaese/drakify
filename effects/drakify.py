@@ -1,7 +1,7 @@
-from dynamic_effects import *
-from filters import *
-from reverb import *
-from time_effects import *
+from effects.dynamic_effects import *
+from effects.filters import *
+from effects.reverb import *
+from effects.time_effects import *
 
 import os
 
