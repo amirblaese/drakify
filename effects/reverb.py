@@ -7,6 +7,7 @@ import soundfile as sf
 
 def conv_reverb(filename, ir="/../assets/default_reverb_IR.wav", wet=0.2, wout=True):
     start = time.time()
+    print(filename)
     n, data, data_dB, sr, ch = inputwav(filename)
     n_IR, data_IR, data_dB_IR, sr_IR, ch_IR = inputwav(ir)
     print("Convolving impulse response with track...")
