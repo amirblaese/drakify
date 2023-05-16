@@ -66,13 +66,13 @@ A series of FFT filters meant for brickwall highpass or lowpass or band reject f
 and not just attenuated.
 These generally do not sound good.
 
-![Alt text](pic/FFT_Filter.png?raw=true "FFT HPF at 200 Hz. Notice the ringing introduced in the time domain in the filtered data.")
+![Alt text](readme_files/pic/FFT_Filter.png?raw=true "FFT HPF at 200 Hz. Notice the ringing introduced in the time domain in the filtered data.")
 
 ###### Filters (LPF, HPF, BP)
 
 Quick and easy implementation of the scipy Butterworth IIR filters to process audio.
 
-![Alt text](pic/Filter.png?raw=true "Single pole HPF at 200 Hz.")
+![Alt text](readme_files/pic/Filter.png?raw=true "Single pole HPF at 200 Hz.")
 
 ###### Slow
 
@@ -86,13 +86,13 @@ Convolution reverb implementation, much faster than the previous iteration and s
 
 Delay algorithm. Currently a bit finnicky to use but can sound quite nice with correct settings, see the **drakifyL** function for some nice numbers.
 
-![Alt text](pic/delay.png?raw=true "Illustration of the delay algorithm. The original signal is repeated <y> times with reduced amplitude at <x> sample spacing")
+![Alt text](readme_files/pic/delay.png?raw=true "Illustration of the delay algorithm. The original signal is repeated <y> times with reduced amplitude at <x> sample spacing")
 
 ###### Compress (limit)
 
 Dynamic range compressor. Contains almost all standard settings of compressors (threshold, ratio, attack, release, makeup). Currently only uses a hard knee and does **not** calculate makeup gain automatically. Also performs gain smoothing algorithm. Beware of low attack times that may cause distortion. Limit applies compression at high ratio.
 
-![Alt text](pic/Compressor.png?raw=true "Dynamic range compression and gain reduction curves.")
+![Alt text](readme_files/pic/Compressor.png?raw=true "Dynamic range compression and gain reduction curves.")
 
 ###### Distort
 
