@@ -2,7 +2,7 @@ from effects.dynamic_effects import *
 from effects.filters import *
 from effects.reverb import *
 from effects.time_effects import *
-from effects.utilities import *
+from utilities import *
 
 import os
 
