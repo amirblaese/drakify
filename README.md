@@ -82,12 +82,6 @@ Resample the audio to convert to higher or lower speed (default slows by 10%).
 
 Convolution reverb implementation, much faster than the previous iteration and sounds like real reverb. You can use your own impulse response file if you wish.
 
-###### Verb
-
-Delay algorithm. Currently a bit finnicky to use but can sound quite nice with correct settings, see the **drakifyL** function for some nice numbers.
-
-![Alt text](readme_files/pic/delay.png?raw=true "Illustration of the delay algorithm. The original signal is repeated <y> times with reduced amplitude at <x> sample spacing")
-
 ###### Compress (limit)
 
 Dynamic range compressor. Contains almost all standard settings of compressors (threshold, ratio, attack, release, makeup). Currently only uses a hard knee and does **not** calculate makeup gain automatically. Also performs gain smoothing algorithm. Beware of low attack times that may cause distortion. Limit applies compression at high ratio.
