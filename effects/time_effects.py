@@ -35,7 +35,6 @@ def slow(filename, p=10, wout=True):
         )
     f = resample(data, int(len(data) * (1 + p / 100.0)))
     if wout:
-        print("Exporting...")
         sf.write(filename[0 : len(filename) - 4] + "_slow.wav", f, sr, "PCM_16")
         print("Done!")
     return f
@@ -71,14 +70,12 @@ def stereo(filename, time, wout=True):
     if ch == 1:
         L[:] = data[:, 0]
         R[:] = data[:, 0]
-    print("Applying stereo width...")
     for i in range(n - s_shift):
         R[i] = R[i + s_shift]
     data_st = np.zeros((n, 2))
     data_st[:, 0] = L[:]
     data_st[:, 1] = R[:]
     if wout:
-        print("Exporting...")
         sf.write(
             filename[0 : len(filename) - 4] + "_stereo.wav", data_st, 44100, "PCM_16"
         )

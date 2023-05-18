@@ -59,7 +59,6 @@ def compress(filename, threshold, ratio, makeup, attack, release, wout=True):
     a = np.exp(-np.log10(9) / (44100 * attack * 1.0e-3))
     re = np.exp(-np.log10(9) / (44100 * release * 1.0e-3))
     # apply compression
-    print("Compressing...")
     for k in range(ch):
         for i in range(n):
             if dataC[i, k] > threshold:
@@ -71,7 +70,6 @@ def compress(filename, threshold, ratio, makeup, attack, release, wout=True):
     gain = np.subtract(dataC, data_dB)
     sgain = gain.copy()
     # smoothen gain
-    print("Smoothing...")
     for k in range(ch):
         for i in range(1, n):
             if sgain[i - 1, k] >= sgain[i, k]:
@@ -90,7 +88,6 @@ def compress(filename, threshold, ratio, makeup, attack, release, wout=True):
                 dataCs_bit[i, k] = -1.0 * dataCs_bit[i, k]
     # write data to 16 bit file
     if wout:
-        print("Exporting...")
         sf.write(
             filename[0 : len(filename) - 4] + "_compressed.wav",
             dataCs_bit,
@@ -99,8 +96,6 @@ def compress(filename, threshold, ratio, makeup, attack, release, wout=True):
         )
     end = time.time()
     elapsed = int(1000 * (end - start))
-    print("Done!")
-    print("...............................")
     print("Completed in " + str(elapsed) + " milliseconds.")
     return dataCs, dataCs_bit
 

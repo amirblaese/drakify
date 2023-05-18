@@ -133,7 +133,7 @@ def mix(f1, f2, r):
     data_sum = r * data + (1 - r) * data1
     sf.write(f1[0 : len(f1) - 4] + f2, data_sum, sr, "PCM_16")
 
-    
+
 def mono(filename, wout=True):
     """
     Converts a stereo track to mono.
@@ -152,18 +152,15 @@ def mono(filename, wout=True):
     """
     n, data, data_dB, sr, ch = inputwav(filename)
     if ch == 2:
-        print("Converting to mono...")
         L = data[:, 0]
         R = data[:, 1]
         n = len(data)
         data_m = np.zeros((n, 1))
         data_m = L / 2.0 + R / 2.0
         if wout == True:
-            print("Exporting...")
             sf.write(
                 filename[0 : len(filename) - 4] + "_mono.wav", data_m, sr, "PCM_16"
             )
-        print("Done!")
         return data_m
     else:
         print("Error: input is already mono stoooooooooopid!")
