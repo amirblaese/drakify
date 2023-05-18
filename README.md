@@ -19,8 +19,8 @@ This library uses a few basic python libraries: numpy, pylab, scipy(fftpack,sign
 
     !git clone https://github.com/amirblaese/drakify
     cd drakify
-    import audiosfx as aud
-    aud.drakify('my_favorite_song.wav')
+    from effects.drakify import drakify
+    drakify('MY_FAV_SONG.WAV')
 
 ## Features 
 - Filters
